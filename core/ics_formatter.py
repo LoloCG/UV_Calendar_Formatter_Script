@@ -35,7 +35,7 @@ class ICSHandler:
             
             events.append({
                 'UID':getattr(event, 'uid', None),
-                'SHORT_DESCRIPTION': getattr(event, 'name', '') or '',
+                'SUMMARY': getattr(event, 'name', '') or '',
                 'DESCRIPTION': description_str,
                 'CLASSIFICATION': getattr(event, 'classification', None),
                 'CATEGORIES': categories_str,
@@ -43,6 +43,7 @@ class ICSHandler:
                 'LAST_MODIFIED': ICSHelpers._to_datetime(getattr(event, 'last_modified', None)),
                 'DTSTART': ICSHelpers._to_datetime(getattr(event, 'begin', None)),
                 'DTEND':   ICSHelpers._to_datetime(getattr(event, 'end', None)),
+                'LOCATION': getattr(event, 'location', None) # This is not found in the original .ics from UV university
             })
         
         return events

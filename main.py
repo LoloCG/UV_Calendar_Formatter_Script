@@ -1,27 +1,32 @@
 from utils.logger import LoggerSingleton
 from utils.json_manager import JsonMng
-from core.ics_formatter import open_ics_file
+from core.ics_formatter import ICSHandler
+from utils.file_selector import pick_file
 
 CONFIGFILE = "calendar_config.json"
 ICSFILEPATH = "horari_2026_.ics"
 
 def main():
     log.info("Start.")
+    
+    ics_filepath = pick_file()
+    if ics_filepath is None:
+        log.info("No file selected")
+        return
+    
+    log.debug(f"Filepath chosen = {ics_filepath}")
 
-    config_mng = JsonMng(CONFIGFILE)
-    # if not config_mng.config_exists():
-    #     msg = "No config file found."
-    #     log.error(msg)
-    #     raise FileNotFoundError(msg)
-
-    cal_list = open_ics_file(path=ICSFILEPATH, as_list=True)
+    ics = ICSHandler(ics_filepath)
+    cal_list = ics.as_list()
     log.debug(f"Found a total of {len(cal_list)} events.")
 
     i=0
-    while i < 5:
+    while i < 1:
         event = cal_list[i]
-        log.debug(event)
+        log.debug(f"event={event}")
         i += 1
+    return
+
 
     config_mng.save_dict_to_config(cal_list)
 
