@@ -17,8 +17,15 @@ class JsonMng:
         return f"{self.__class__.__name__}(path={self.path})"
     
     def config_exists(self) -> bool:
-        if (self.load_json_config() == {}): return False
-        return True
+        p = self.path
+        if not p.exists():
+            return False
+        try:
+            _ = self.load_json_config()
+            return True
+        except Exception:
+            # Exists but unreadable/invalid JSON
+            return False
 
     def save_dict_to_config(self, data:dict, path=None, ensure_ascii:bool=True):
         if not path: path = self.path

@@ -46,7 +46,7 @@ def main():
         ev_values = ev.get_values()
         
     if apply_names == False:
-        config_mng.save_dict_to_config(data=unique_id, ensure_ascii=False)
+        config_mng.save_dict_to_config(data=unique_id, ensure_ascii=True)
 
 
     # formatter_event_loop([cal_list[0]], config=None)
