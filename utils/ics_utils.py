@@ -1,9 +1,9 @@
-# Last update: 16/9/25
 from datetime import datetime
 from pathlib import Path
 from ics import Calendar, Event
+# Last update: 16/9/25
 
-class ICSHandler:
+class ICSCalendarHandler:
     def __init__(self, ics_filepath):
         self.filepath = None  
         self.calendar = self._open_file(ics_filepath)
@@ -45,6 +45,38 @@ class ICSHandler:
         
         return events
 
+class ICSGenerator:
+    def __init__(self, filepath:str|Path|None=None, filename:str|None=None):
+        self.calendar = Calendar()
+    
+    def add_events(self, events:list):
+
+        for row in events:
+            event = Event()
+
+            event.uid=row.get("")
+
+            # 'UID':getattr(event, 'uid', None),
+            # 'SUMMARY': getattr(event, 'name', '') or '',
+            # 'DESCRIPTION': description_str,
+            # 'CLASSIFICATION': getattr(event, 'classification', None),
+            # 'CATEGORIES': categories_str,
+            # 'CREATED': ICSHelpers._to_datetime(getattr(event, 'created', None)),
+            # 'LAST_MODIFIED': ICSHelpers._to_datetime(getattr(event, 'last_modified', None)),
+            # 'DTSTART': ICSHelpers._to_datetime(getattr(event, 'begin', None)),
+            # 'DTEND':   ICSHelpers._to_datetime(getattr(event, 'end', None)),
+            # 'LOCATION': getattr(event, 'location', None)
+
+            event.name = row['SUMMARY']
+            event.begin = row['DTSTART']
+            event.end = row['DTEND']
+            event.location = str(row.get('LOCATION', ''))
+            event.description = str(row.get('DESCRIPTION', ''))
+            event.priority = row.get('PRIORITY', '')
+            event.dtstamp = row.get('DTSTAMP', '')
+            event.uid = row.get('UID','')
+
+    
 class ICSHelpers:
     @staticmethod
     def _to_datetime(value) -> datetime | None:

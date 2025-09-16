@@ -20,12 +20,12 @@ class JsonMng:
         if (self.load_json_config() == {}): return False
         return True
 
-    def save_dict_to_config(self, data, path=None):
+    def save_dict_to_config(self, data, path=None, ensure_ascii=True):
         if not path: path = self.path
         log.info(f"Saving data to {path}")
 
         with open(path, 'w') as json_file:
-            json.dump(data, json_file, indent=2)
+            json.dump(data, json_file, indent=2, ensure_ascii=ensure_ascii)
 
     def load_json_config(self) -> dict:
         """

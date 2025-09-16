@@ -23,7 +23,7 @@ For each event, the following info is extracted:
 ```
 {
     'UID': '20260325T1100-20260325T1200-33957-DG-T', 
-    'SHORT_DESCRIPTION': '33957 - Nutrición: Nutrición Grupo Teoría DG-T', 
+    'SUMMARY': '33957 - Nutrición: Nutrición Grupo Teoría DG-T', 
     'DESCRIPTION': 'AULA AF-14 B 21', 
     'CLASSIFICATION': None, 
     'CATEGORIES': '', 
