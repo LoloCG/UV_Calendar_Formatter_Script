@@ -10,8 +10,7 @@ class UVEventFormatter:
     _CODE_PREFIX_RE = re.compile(r'^\s*(?P<code>\d{4,6})\s*[-–—]\s*')        # 5-digit code + hyphen/en dash/em dash
     _GRUPO_TRAILER_RE = re.compile(r'\s+Grupo\s+.+$', re.IGNORECASE)       # strip trailing "Grupo ..."
 
-    def __init__(self, event_dict:dict, config = None):
-        self.config = config or {}
+    def __init__(self, event_dict:dict):
         self.event = event_dict
 
         self.subject_id: str    = ""
@@ -19,7 +18,9 @@ class UVEventFormatter:
         self.group: str         = ""
         self.class_type: str    = ""
 
-    def extract_subject(self):
+        self._extract_subject_data()
+
+    def _extract_subject_data(self):
         summary = (self.event.get("SUMMARY") or "").strip()
 
         # Subject ID (from leading code)
@@ -41,7 +42,25 @@ class UVEventFormatter:
         self.group = (m_group.group(2).upper() if m_group else "")
 
         return self
+
+    def rename_subjects(self, config:dict|None = None, name:str|None=None):
+        '''
+        Requires dict parameter consisting of subject id (5 digits), and
+        the desired name. 
+        '''
+        if config is None and name is None:
+            return self
         
+        if self.subject_id in config.keys():
+            new_name = config[self.subject_id]
+
+        elif name is not None:
+            new_name = name
+
+        self.subject = new_name
+        
+        return self
+    
     def get_values(self):
         return {
             "subject": self.subject,

@@ -20,7 +20,7 @@ class JsonMng:
         if (self.load_json_config() == {}): return False
         return True
 
-    def save_dict_to_config(self, data, path=None, ensure_ascii=True):
+    def save_dict_to_config(self, data:dict, path=None, ensure_ascii:bool=True):
         if not path: path = self.path
         log.info(f"Saving data to {path}")
 
