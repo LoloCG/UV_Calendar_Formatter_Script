@@ -4,6 +4,8 @@ from core.ics_formatter import UVEventFormatter
 from utils.ics_utils import ICSCalendarHandler
 from utils.file_selector import pick_file
 
+from datetime import datetime
+
 CONFIGFILE = "calendar_config.json"
 ICSFILEPATH = "horari_2026_.ics"
 
@@ -44,11 +46,32 @@ def main():
             ev.rename_subjects(unique_id)
 
         ev_values = ev.get_values()
-        
+
+        class_type = ev_values.get("class_type")
+        priority = 6
+        if (class_type in {"Seminario", "Tutorías"}): priority = 3
+        elif class_type == "Laboratorio": priority = 1
+
+        edited_event = {
+            'UID': event['UID'],
+            'SUMMARY': f"{ev_values["subject"]} - {class_type}", 
+            'DESCRIPTION': f'({ev_values["subject_id"]}) - {class_type}, {ev_values["class_group"]}. Location: {event['DESCRIPTION']}', 
+            'CREATED': event['CREATED'], 
+            'LAST_MODIFIED': datetime.now(), 
+            'DTSTART': event['DTSTART'],
+            'DTEND': event['DTEND'],
+            'TRANSP': "OPAQUE" if class_type in {"Seminario", "Tutorías", "Laboratorio"} else "TRANSPARENT",
+            'PRIORITY': priority
+        }
+        new_cal_list.append(edited_event)
+
     if apply_names == False:
         config_mng.save_dict_to_config(data=unique_id, ensure_ascii=True)
 
 
+    # TODO
+    for event in new_cal_list:
+        log.info(event)
     # formatter_event_loop([cal_list[0]], config=None)
 
 logger_instance = LoggerSingleton()
