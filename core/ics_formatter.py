@@ -1,94 +1,51 @@
-import hashlib
-import pandas as pd
+from utils.ics_utils import ICSHandler
 from ics import Calendar, Event
-import json
-from datetime import datetime
-from pathlib import Path
+import re
 
 from utils.logger import LoggerSingleton
 log = LoggerSingleton().get_logger()
 
-class ICSHandler:
-    def __init__(self, ics_filepath):
-        self.filepath = None  
-        self.calendar = self._open_file(ics_filepath)
+class UVEventFormatter:
+    def __init__(self, event_dict:dict, config = None):
+        self.config = config or {}
+        self.event = event_dict
 
-    def _open_file(self, path:str|Path):
-        ics_file_path = Path(path) if isinstance(path, str) else path 
+        self.subject_id = None
+        self.group      = None
+        self.class_type = None
 
-        log.info(f"Searching for calendar file '{ics_file_path}'")
-        if not ics_file_path.exists():
-            msg = f"Calendar file not found: {ics_file_path.resolve()}"
-            log.error(msg)
-            raise FileNotFoundError(msg)
-        self.filepath = ics_file_path
+    '''
+    _GROUP_NORMALIZE = {
+        "teoria": "Teoría",
+        "teoría": "Teoría",
+        "laboratorio": "Laboratorio",
+        "tutoria": "Tutorías",
+        "tutoría": "Tutorías",
+        "tutorias": "Tutorías",
+        "tutorías": "Tutorías",
+        "seminario": "Seminario",
+    }
+    '''
 
-        with open(ics_file_path, 'r',encoding='utf-8') as f:
-            return Calendar(f.read())
+    _GROUP_TYPE_RE = re.compile(
+        r'Grupo\s+(.+?)\s+([A-Za-z0-9-]+)\s*$',
+        re.IGNORECASE
+    )
 
-    def as_list(self)-> list:
-        calendar = self.calendar
-        events = []
-        for event in calendar.events:
-            categories_str  = ICSHelpers._stringify(getattr(event, "categories", None), sep=", ")
-            description_str = ICSHelpers._stringify(getattr(event, "description", None), sep=" ")
-            
-            events.append({
-                'UID':getattr(event, 'uid', None),
-                'SUMMARY': getattr(event, 'name', '') or '',
-                'DESCRIPTION': description_str,
-                'CLASSIFICATION': getattr(event, 'classification', None),
-                'CATEGORIES': categories_str,
-                'CREATED': ICSHelpers._to_datetime(getattr(event, 'created', None)),
-                'LAST_MODIFIED': ICSHelpers._to_datetime(getattr(event, 'last_modified', None)),
-                'DTSTART': ICSHelpers._to_datetime(getattr(event, 'begin', None)),
-                'DTEND':   ICSHelpers._to_datetime(getattr(event, 'end', None)),
-                'LOCATION': getattr(event, 'location', None) # This is not found in the original .ics from UV university
-            })
-        
-        return events
+    def extract_subject_id(self):
+        # 'SUMMARY': '33957 - Nutrición: Nutrición Grupo Teoría DG-T',
+        summary = self.event["SUMMARY"]
+        self.subject_id = summary[0:5]
 
-class ICSHelpers:
-    @staticmethod
-    def _to_datetime(value) -> datetime | None:
-        """
-        Return a datetime if possible; otherwise None.
-        Handles ics.py Arrow-like objects, datetime, and ISO-ish strings.
-        """
-        if value is None:
-            return None
-        # ics.py uses Arrow; its fields expose `.datetime`
-        if hasattr(value, "datetime"):
-            try:
-                dt = value.datetime
-                return dt if isinstance(dt, datetime) else None
-            except Exception:
-                return None
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str):
-            s = value.strip()
-            try:
-                # Handle trailing 'Z' and offset forms
-                return datetime.fromisoformat(s.replace("Z", "+00:00"))
-            except Exception:
-                return None
-        return None
+        match = self._GRUP_TYPE_RE.search()
+        self.class_type = match.group(1) if match else ""
+        self.group = match.group(2).upper() if match else ""
 
-    @staticmethod
-    def _stringify(value, sep: str = ", ") -> str:
-        """Convert strings/iterables/None to a single string."""
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            return value
-        try:
-            return sep.join(str(x) for x in value)
-        except TypeError:
-            # Not iterable; fall back to plain str
-            return str(value)
-# ------------------------- OLD FILES -------------------------
+        for m in match.groups():
+            log.debug(f"type={self.class_type}, group={self.group}")
 
+# ------------------------- OLD CODE -------------------------
+'''
 def main_ics_formater():
     schedule_df = convert_schedule_json_to_df()
 
@@ -284,3 +241,4 @@ def convert_df_to_ics(df):
         f.writelines(calendar)
 
     log.info(f"Final Calendar saved as {filename}. <--")
+'''
