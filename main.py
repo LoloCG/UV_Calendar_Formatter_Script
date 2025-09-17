@@ -13,12 +13,12 @@ ICSFILEPATH = "horari_2026_.ics"
 def main():
     log.info("Start.")
     
-    if True: ics_filepath=ICSFILEPATH # Added for debug to avoid selection of calendar
-    else:
-        ics_filepath = pick_file()
-        if ics_filepath is None:
-            log.info("No file selected")
-            return
+    # if True: ics_filepath=ICSFILEPATH # Added for debug to avoid selection of calendar
+    # else:
+    ics_filepath = pick_file()
+    if ics_filepath is None:
+        log.info("No file selected")
+        return
     log.debug(f"Filepath chosen = {ics_filepath}")
 
     ics = ICSCalendarHandler(ics_filepath)
@@ -34,7 +34,7 @@ def main():
         unique_id = {}
         apply_names=False
     
-    log.debug(f"apply_names={apply_names}")
+    log.info(f"Apply custom names = {apply_names}")
 
     new_cal_list = []
     for event in cal_list:
