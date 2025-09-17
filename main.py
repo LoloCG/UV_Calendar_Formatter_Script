@@ -1,8 +1,9 @@
 from utils.logger import LoggerSingleton
 from utils.json_manager import JsonMng
 from core.ics_formatter import UVEventFormatter
-from utils.ics_utils import ICSCalendarHandler
+from utils.ics_utils import ICSCalendarHandler, ICSGenerator
 from utils.file_selector import pick_file
+import unicodedata
 
 from datetime import datetime
 
@@ -47,32 +48,43 @@ def main():
 
         ev_values = ev.get_values()
 
-        class_type = ev_values.get("class_type")
-        priority = 6
-        if (class_type in {"Seminario", "Tutorías"}): priority = 3
-        elif class_type == "Laboratorio": priority = 1
+        raw_class_type = ev_values.get("class_type")
+
+        cls_norm = _norm(raw_class_type)        
+        opaque = cls_norm in {"seminario", "tutorias", "laboratorio"}
+
+        # TODO: priority not yet added due to some fault in detecting similarities in string or something... 
+        # priority = 6
+        # if (cls_norm in {"seminario", "tutorias"}): priority = 3
+        # elif cls_norm == "laboratorio": priority = 1
 
         edited_event = {
             'UID': event['UID'],
-            'SUMMARY': f"{ev_values["subject"]} - {class_type}", 
-            'DESCRIPTION': f'({ev_values["subject_id"]}) - {class_type}, {ev_values["class_group"]}. Location: {event['DESCRIPTION']}', 
+            'SUMMARY': f"{ev_values["subject"]} - {raw_class_type}", 
+            'DESCRIPTION': f'({ev_values["subject_id"]}) - {raw_class_type} grupo {ev_values["class_group"]}. Location: {event['DESCRIPTION']}', 
             'CREATED': event['CREATED'], 
             'LAST_MODIFIED': datetime.now(), 
             'DTSTART': event['DTSTART'],
             'DTEND': event['DTEND'],
-            'TRANSP': "OPAQUE" if class_type in {"Seminario", "Tutorías", "Laboratorio"} else "TRANSPARENT",
-            'PRIORITY': priority
+            'TRANSP': False if opaque else True,
+            # 'PRIORITY': priority
         }
         new_cal_list.append(edited_event)
 
     if apply_names == False:
         config_mng.save_dict_to_config(data=unique_id, ensure_ascii=True)
 
+    gen = ICSGenerator()
+    log.info(f"Adding events and generating ics file.")
+    gen.add_events(new_cal_list).generate_ics()
 
-    # TODO
-    for event in new_cal_list:
-        log.info(event)
-    # formatter_event_loop([cal_list[0]], config=None)
+def _norm(s: str) -> str:
+    """strip, collapse spaces, strip accents, casefold"""
+    s = (s or "").replace("\u00A0", " ").strip()          # NBSP → space
+    s = " ".join(s.split())                                # collapse inner spaces
+    s = "".join(c for c in unicodedata.normalize("NFD", s) # remove accents
+    if not unicodedata.combining(c))
+    return s.casefold()
 
 logger_instance = LoggerSingleton()
 logger_instance.set_logger_config(level='DEBUG')

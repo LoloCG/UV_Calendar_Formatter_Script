@@ -1,6 +1,11 @@
 from datetime import datetime
 from pathlib import Path
 from ics import Calendar, Event
+try:
+    from ics.grammar.parse import ContentLine
+except Exception:
+    ContentLine = None
+
 # Last update: 16/9/25
 
 class ICSCalendarHandler:
@@ -46,37 +51,49 @@ class ICSCalendarHandler:
         return events
 
 class ICSGenerator:
-    def __init__(self, filepath:str|Path|None=None, filename:str|None=None):
+    def __init__(self):
         self.calendar = Calendar()
     
     def add_events(self, events:list):
-
+        cal = self.calendar
         for row in events:
-            event = Event()
+            ev = Event()
 
-            event.uid=row.get("")
+            if 'UID' in row:            ev.uid = str(row['UID'])
+            if 'SUMMARY' in row:        ev.name = row['SUMMARY']
+            if 'DESCRIPTION' in row:    ev.description = row['DESCRIPTION']
+            if 'LOCATION' in row:       ev.location = row['LOCATION']
+            if 'DTSTART' in row:        ev.begin = row['DTSTART']
+            if 'DTEND' in row:          ev.end = row['DTEND']
+            if 'CREATED' in row:        ev.created = row['CREATED']
+            if 'LAST_MODIFIED' in row:  ev.last_modified = row['LAST_MODIFIED']
+            if 'STATUS' in row:         ev.status = row['STATUS']
+            if 'URL' in row:            ev.url = row['URL']
+            if 'TRANSP' in row:         ev.transparent = row['TRANSP']
+            # Priority is missing. Requires use of extras
+            
+            cal.events.add(ev)
 
-            # 'UID':getattr(event, 'uid', None),
-            # 'SUMMARY': getattr(event, 'name', '') or '',
-            # 'DESCRIPTION': description_str,
-            # 'CLASSIFICATION': getattr(event, 'classification', None),
-            # 'CATEGORIES': categories_str,
-            # 'CREATED': ICSHelpers._to_datetime(getattr(event, 'created', None)),
-            # 'LAST_MODIFIED': ICSHelpers._to_datetime(getattr(event, 'last_modified', None)),
-            # 'DTSTART': ICSHelpers._to_datetime(getattr(event, 'begin', None)),
-            # 'DTEND':   ICSHelpers._to_datetime(getattr(event, 'end', None)),
-            # 'LOCATION': getattr(event, 'location', None)
+        return self
 
-            event.name = row['SUMMARY']
-            event.begin = row['DTSTART']
-            event.end = row['DTEND']
-            event.location = str(row.get('LOCATION', ''))
-            event.description = str(row.get('DESCRIPTION', ''))
-            event.priority = row.get('PRIORITY', '')
-            event.dtstamp = row.get('DTSTAMP', '')
-            event.uid = row.get('UID','')
-
+    def get_cal(self)-> Calendar:
+        return self.calendar
     
+    def generate_ics(self, filename:str="new_calendar"): # TODO: add: filepath:str|Path|None=None,
+        with open(f'{filename}.ics', 'w', encoding='utf-8') as f:
+            f.writelines(self.calendar)
+    
+    # TODO:
+    def _add_extra(ev: Event, name: str, value: str, params: dict[str, str] | None = None) -> None:
+        if value is None:
+            return
+        if ContentLine is not None:
+            ev.extra.append(ContentLine(name=name, params=(params or {}), value=str(value)))
+        else:
+            # Fallback: flatten params manually (simple; sufficient for most keys)
+            param_str = "".join(f";{k}={v}" for k, v in (params or {}).items())
+            ev.extra.append(f"{name}{param_str}:{value}")
+
 class ICSHelpers:
     @staticmethod
     def _to_datetime(value) -> datetime | None:
@@ -116,3 +133,14 @@ class ICSHelpers:
         except TypeError:
             # Not iterable; fall back to plain str
             return str(value)
+
+    @staticmethod
+    def ics_unescape(s: str) -> str:
+        """Unescape RFC5545 sequences in a property value."""
+        if not isinstance(s, str):
+            return s
+        # Order matters: unescape backslash first
+        s = s.replace("\\\\", "\\")
+        s = s.replace("\\,", ",").replace("\\;", ";")
+        s = s.replace("\\n", "\n").replace("\\N", "\n")
+        return s

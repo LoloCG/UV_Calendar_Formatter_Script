@@ -1,4 +1,4 @@
-from utils.ics_utils import ICSCalendarHandler
+from utils.ics_utils import ICSCalendarHandler, ICSHelpers
 from ics import Calendar, Event
 import re
 
@@ -6,7 +6,8 @@ from utils.logger import LoggerSingleton
 log = LoggerSingleton().get_logger()
 
 class UVEventFormatter:
-    _GROUP_TYPE_RE = re.compile(r'Grupo\s+(.+?)\s+([A-Za-z0-9-]+)\s*$', re.IGNORECASE)
+    # _GROUP_TYPE_RE = re.compile(r'Grupo\s+(.+?)\s+([A-Za-z0-9-]+)\s*$', re.IGNORECASE)
+    _GROUP_TYPE_RE = re.compile(r'Grupo\s+(?P<type>.+?)\s+(?P<tag>[A-Za-z0-9-]+)\s*$',re.IGNORECASE)
     _CODE_PREFIX_RE = re.compile(r'^\s*(?P<code>\d{4,6})\s*[-–—]\s*')        # 5-digit code + hyphen/en dash/em dash
     _GRUPO_TRAILER_RE = re.compile(r'\s+Grupo\s+.+$', re.IGNORECASE)       # strip trailing "Grupo ..."
 
@@ -36,7 +37,6 @@ class UVEventFormatter:
         title = self._GRUPO_TRAILER_RE.sub("", rest).strip()
         self.subject = title
 
-        # Group type + tag (e.g., "Laboratorio", "DG-L2")
         m_group = self._GROUP_TYPE_RE.search(summary)
         self.class_type = m_group.group(1) if m_group else ""
         self.group = (m_group.group(2).upper() if m_group else "")
@@ -68,6 +68,7 @@ class UVEventFormatter:
             "class_type":self.class_type,
             "class_group":self.group
         }
+
 
 # ------------------------- OLD CODE -------------------------
 # def main_ics_formater():
