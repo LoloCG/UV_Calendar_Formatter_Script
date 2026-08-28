@@ -22,7 +22,7 @@ class ICSCalendarHandler:
             raise FileNotFoundError(msg)
         self.filepath = ics_file_path
 
-        with open(ics_file_path, 'r',encoding='utf-8') as f:
+        with open(ics_file_path, 'r', encoding='utf-8-sig') as f:
             return Calendar(f.read())
 
     def as_dicts(self)-> list:
@@ -56,7 +56,7 @@ class ICSCalendarHandler:
         """
         if self.filepath is None:
             return ""
-        with open(self.filepath, "r", encoding="utf-8") as f:
+        with open(self.filepath, "r", encoding="utf-8-sig") as f:
             raw = f.read()
         marker = "BEGIN:VEVENT"
         idx = raw.find(marker)
