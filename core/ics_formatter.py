@@ -10,6 +10,15 @@ class UVEventFormatter:
     _GROUP_TYPE_RE = re.compile(r'Grupo\s+(?P<type>.+?)\s+(?P<tag>[A-Za-z0-9-]+)\s*$',re.IGNORECASE)
     _CODE_PREFIX_RE = re.compile(r'^\s*(?P<code>\d{4,6})\s*[-–—]\s*')        # 5-digit code + hyphen/en dash/em dash
     _GRUPO_TRAILER_RE = re.compile(r'\s+Grupo\s+.+$', re.IGNORECASE)       # strip trailing "Grupo ..."
+    # 2026 UV export: "34082 - Subject(TEORÍA (34082))"
+    _NEW_SUMMARY_RE = re.compile(
+        r'^(?P<subject>.+?)\s*\((?P<type>[^()]+?)\s+\(\d{4,6}\)\)\s*$'
+    )
+    # In the 2026 export, the group moved to DESCRIPTION: "DG-T - Grupo Teoría".
+    _NEW_DESCRIPTION_RE = re.compile(
+        r'^(?P<tag>[A-Za-z0-9-]+)\s*-\s*Grupo\s+(?P<type>.+?)\s*$',
+        re.IGNORECASE,
+    )
 
     def __init__(self, event_dict:dict):
         self.event = event_dict
@@ -33,13 +42,30 @@ class UVEventFormatter:
             self.subject_id = ""
             rest = summary
 
-        # Remove trailing "Grupo <type> <tag>" from the title, if present
-        title = self._GRUPO_TRAILER_RE.sub("", rest).strip()
-        self.subject = title
-
+        # Maintained for backwards compatibility. For pre-2026 .ics from UV calendars
+        # These contained subject, type and group in summary field. see #3
         m_group = self._GROUP_TYPE_RE.search(summary)
-        self.class_type = m_group.group(1) if m_group else ""
-        self.group = (m_group.group(2).upper() if m_group else "")
+        if m_group:
+            self.subject = self._GRUPO_TRAILER_RE.sub("", rest).strip()
+            self.class_type = m_group.group("type")
+            self.group = m_group.group("tag").upper()
+            return self
+
+        # The 2026 export puts the type in SUMMARY and group in DESCRIPTION.
+        m_summary = self._NEW_SUMMARY_RE.match(rest)
+        if m_summary:
+            self.subject = m_summary.group("subject").strip()
+            self.class_type = m_summary.group("type").strip()
+        else:
+            # Keep a readable title if a future export uses another layout.
+            self.subject = rest
+
+        description = (self.event.get("DESCRIPTION") or "").strip()
+        m_description = self._NEW_DESCRIPTION_RE.match(description)
+        if m_description:
+            self.group = m_description.group("tag").upper()
+            if not self.class_type:
+                self.class_type = m_description.group("type").strip()
 
         return self
 
