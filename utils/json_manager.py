@@ -27,11 +27,11 @@ class JsonMng:
             # Exists but unreadable/invalid JSON
             return False
 
-    def save_dict_to_config(self, data:dict, path=None, ensure_ascii:bool=True):
+    def save_dict_to_config(self, data:dict, path=None, ensure_ascii:bool=False):
         if not path: path = self.path
         log.info(f"Saving data to {path}")
 
-        with open(path, 'w') as json_file:
+        with open(path, 'w', encoding='utf-8') as json_file:
             json.dump(data, json_file, indent=2, ensure_ascii=ensure_ascii)
 
     def load_json_config(self) -> dict:
@@ -48,7 +48,7 @@ class JsonMng:
         """update or insert, and save the config data."""
         cfg_file = Path(self.path)
         if cfg_file.exists():
-            with open(cfg_file, 'r') as file:
+            with open(cfg_file, 'r', encoding='utf-8') as file:
                 try:
                     config = json.load(file)
                 except json.JSONDecodeError:
@@ -58,7 +58,7 @@ class JsonMng:
 
         config.update(new_data)
 
-        with open(cfg_file, 'w') as file:
-            json.dump(config, file, indent=4)
+        with open(cfg_file, 'w', encoding='utf-8') as file:
+            json.dump(config, file, indent=4, ensure_ascii=False)
 
         return config

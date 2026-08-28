@@ -13,9 +13,9 @@ ICSFILEPATH = "horari_2026_.ics"
 def main():
     log.info("Start.")
     
-    # if True: ics_filepath=ICSFILEPATH # Added for debug to avoid selection of calendar
+    if True: ics_filepath=ICSFILEPATH # Added for debug to avoid selection of calendar
     # else:
-    ics_filepath = pick_file()
+    # ics_filepath = pick_file()
     if ics_filepath is None:
         log.info("No file selected")
         return
@@ -23,6 +23,7 @@ def main():
 
     ics = ICSCalendarHandler(ics_filepath)
     cal_list = ics.as_dicts()
+    source_preamble = ics.get_preamble()
     log.debug(f"Found a total of {len(cal_list)} events.")
 
     config_mng = JsonMng(CONFIGFILE)
@@ -60,8 +61,8 @@ def main():
 
         edited_event = {
             'UID': event['UID'],
-            'SUMMARY': f"{ev_values["subject"]} - {raw_class_type}", 
-            'DESCRIPTION': f'({ev_values["subject_id"]}) - {raw_class_type} grupo {ev_values["class_group"]}. Location: {event['DESCRIPTION']}', 
+            'SUMMARY': f"{ev_values['subject']} - {raw_class_type}",
+            'DESCRIPTION': f"({ev_values['subject_id']}) - {raw_class_type} grupo {ev_values['class_group']}. Location: {event['DESCRIPTION']}",
             'CREATED': event['CREATED'], 
             'LAST_MODIFIED': datetime.now(), 
             'DTSTART': event['DTSTART'],
@@ -72,9 +73,9 @@ def main():
         new_cal_list.append(edited_event)
 
     if apply_names == False:
-        config_mng.save_dict_to_config(data=unique_id, ensure_ascii=True)
+        config_mng.save_dict_to_config(data=unique_id, ensure_ascii=False)
 
-    gen = ICSGenerator()
+    gen = ICSGenerator(preamble=source_preamble)
     log.info(f"Adding events and generating ics file.")
     gen.add_events(new_cal_list).generate_ics()
 

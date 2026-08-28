@@ -6,7 +6,6 @@ try:
 except Exception:
     ContentLine = None
 
-# Last update: 16/9/25
 
 class ICSCalendarHandler:
     def __init__(self, ics_filepath):
@@ -50,9 +49,23 @@ class ICSCalendarHandler:
         
         return events
 
+    def get_preamble(self) -> str:
+        """
+        Return the original VCALENDAR preamble (everything before first VEVENT).
+        This keeps source metadata/timezone definitions in regenerated files.
+        """
+        if self.filepath is None:
+            return ""
+        with open(self.filepath, "r", encoding="utf-8") as f:
+            raw = f.read()
+        marker = "BEGIN:VEVENT"
+        idx = raw.find(marker)
+        return raw[:idx] if idx != -1 else ""
+
 class ICSGenerator:
-    def __init__(self):
+    def __init__(self, preamble: str | None = None):
         self.calendar = Calendar()
+        self.preamble = preamble or ""
     
     def add_events(self, events:list):
         cal = self.calendar
@@ -78,10 +91,36 @@ class ICSGenerator:
 
     def get_cal(self)-> Calendar:
         return self.calendar
-    
+
+    @staticmethod
+    def _extract_events_block(calendar_text: str) -> str:
+        start = calendar_text.find("BEGIN:VEVENT")
+        if start == -1:
+            return ""
+        end = calendar_text.rfind("END:VEVENT")
+        if end == -1:
+            return ""
+        end += len("END:VEVENT")
+        events_block = calendar_text[start:end]
+        if not events_block.endswith(("\r\n", "\n", "\r")):
+            events_block += "\r\n"
+        return events_block
+
     def generate_ics(self, filename:str="new_calendar"): # TODO: add: filepath:str|Path|None=None,
-        with open(f'{filename}.ics', 'w', encoding='utf-8') as f:
-            f.writelines(self.calendar)
+        calendar_text = str(self.calendar)
+
+        if self.preamble:
+            output = self.preamble
+            if not output.endswith(("\r\n", "\n", "\r")):
+                output += "\r\n"
+            output += self._extract_events_block(calendar_text)
+            output += "END:VCALENDAR\r\n"
+        else:
+            output = calendar_text
+
+        # newline='' avoids Windows CRLF expansion that causes blank lines.
+        with open(f"{filename}.ics", "w", encoding="utf-8", newline="") as f:
+            f.write(output)
     
     # TODO:
     def _add_extra(ev: Event, name: str, value: str, params: dict[str, str] | None = None) -> None:
