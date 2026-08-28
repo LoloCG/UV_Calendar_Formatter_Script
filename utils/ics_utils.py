@@ -107,7 +107,7 @@ class ICSGenerator:
         return events_block
 
     def generate_ics(self, filename:str="new_calendar"): # TODO: add: filepath:str|Path|None=None,
-        calendar_text = str(self.calendar)
+        calendar_text = self.calendar.serialize()
 
         if self.preamble:
             output = self.preamble
