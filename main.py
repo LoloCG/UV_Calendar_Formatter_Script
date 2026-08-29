@@ -64,7 +64,7 @@ def main():
         edited_event = {
             'UID': event['UID'],
             'SUMMARY': f"{ev_values['subject']} - {raw_class_type}",
-            'DESCRIPTION': f"({ev_values['subject_id']}) - {raw_class_type} grupo {ev_values['class_group']}. Location: {event['DESCRIPTION']}",
+            'DESCRIPTION': f"({ev_values['subject_id']}) - {raw_class_type} grupo {ev_values['class_group']}.",
             'CREATED': event['CREATED'], 
             'LAST_MODIFIED': datetime.now(), 
             'DTSTART': event['DTSTART'],
