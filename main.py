@@ -8,14 +8,16 @@ import unicodedata
 from datetime import datetime
 
 CONFIGFILE = "calendar_config.json"
-ICSFILEPATH = "horari_2026_.ics"
+# old_ics_path = r"test_files\old_horari_2025_.ics"
+# new_ics_path = r"test_files\new_horario.ics"
 
 def main():
     log.info("Start.")
-    
-    if True: ics_filepath=ICSFILEPATH # Added for debug to avoid selection of calendar
-    # else:
-    # ics_filepath = pick_file()
+
+    # ics_filepath = new_ics_path
+    # ics_filepath=old_ics_path
+
+    ics_filepath = pick_file()
     if ics_filepath is None:
         log.info("No file selected")
         return
@@ -70,6 +72,8 @@ def main():
             'TRANSP': False if opaque else True,
             # 'PRIORITY': priority
         }
+        if event.get('LOCATION'):
+            edited_event['LOCATION'] = event['LOCATION']
         new_cal_list.append(edited_event)
 
     if apply_names == False:
