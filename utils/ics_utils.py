@@ -1,10 +1,6 @@
 from datetime import datetime
 from pathlib import Path
 from ics import Calendar, Event
-try:
-    from ics.grammar.parse import ContentLine
-except Exception:
-    ContentLine = None
 
 
 class ICSCalendarHandler:
@@ -22,7 +18,7 @@ class ICSCalendarHandler:
             raise FileNotFoundError(msg)
         self.filepath = ics_file_path
 
-        with open(ics_file_path, 'r',encoding='utf-8') as f:
+        with open(ics_file_path, 'r', encoding='utf-8-sig') as f:
             return Calendar(f.read())
 
     def as_dicts(self)-> list:
@@ -56,7 +52,7 @@ class ICSCalendarHandler:
         """
         if self.filepath is None:
             return ""
-        with open(self.filepath, "r", encoding="utf-8") as f:
+        with open(self.filepath, "r", encoding="utf-8-sig") as f:
             raw = f.read()
         marker = "BEGIN:VEVENT"
         idx = raw.find(marker)
@@ -106,8 +102,8 @@ class ICSGenerator:
             events_block += "\r\n"
         return events_block
 
-    def generate_ics(self, filename:str="new_calendar"): # TODO: add: filepath:str|Path|None=None,
-        calendar_text = str(self.calendar)
+    def generate_ics(self, filename: str | Path = "new_calendar") -> Path:
+        calendar_text = self.calendar.serialize()
 
         if self.preamble:
             output = self.preamble
@@ -118,21 +114,15 @@ class ICSGenerator:
         else:
             output = calendar_text
 
-        # newline='' avoids Windows CRLF expansion that causes blank lines.
-        with open(f"{filename}.ics", "w", encoding="utf-8", newline="") as f:
-            f.write(output)
-    
-    # TODO:
-    def _add_extra(ev: Event, name: str, value: str, params: dict[str, str] | None = None) -> None:
-        if value is None:
-            return
-        if ContentLine is not None:
-            ev.extra.append(ContentLine(name=name, params=(params or {}), value=str(value)))
-        else:
-            # Fallback: flatten params manually (simple; sufficient for most keys)
-            param_str = "".join(f";{k}={v}" for k, v in (params or {}).items())
-            ev.extra.append(f"{name}{param_str}:{value}")
+        output_path = Path(filename)
+        if output_path.suffix.casefold() != ".ics":
+            output_path = output_path.with_suffix(".ics")
 
+        # newline='' avoids Windows CRLF expansion that causes blank lines.
+        with open(output_path, "w", encoding="utf-8", newline="") as f:
+            f.write(output)
+        return output_path
+    
 class ICSHelpers:
     @staticmethod
     def _to_datetime(value) -> datetime | None:
