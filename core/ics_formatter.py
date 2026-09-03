@@ -1,12 +1,8 @@
-from utils.ics_utils import ICSCalendarHandler, ICSHelpers
-from ics import Calendar, Event
 import re
 
-from utils.logger import LoggerSingleton
-log = LoggerSingleton().get_logger()
+from core.models import CalendarEventData
 
 class UVEventFormatter:
-    # _GROUP_TYPE_RE = re.compile(r'Grupo\s+(.+?)\s+([A-Za-z0-9-]+)\s*$', re.IGNORECASE)
     _GROUP_TYPE_RE = re.compile(r'Grupo\s+(?P<type>.+?)\s+(?P<tag>[A-Za-z0-9-]+)\s*$',re.IGNORECASE)
     _CODE_PREFIX_RE = re.compile(r'^\s*(?P<code>\d{4,6})\s*[-–—]\s*')        # 5-digit code + hyphen/en dash/em dash
     _GRUPO_TRAILER_RE = re.compile(r'\s+Grupo\s+.+$', re.IGNORECASE)       # strip trailing "Grupo ..."
@@ -94,3 +90,24 @@ class UVEventFormatter:
             "class_type":self.class_type,
             "class_group":self.group
         }
+
+    def to_event_data(self) -> CalendarEventData:
+        """Return this UV event as validated, normalized domain data."""
+
+        start = self.event.get("DTSTART")
+        end = self.event.get("DTEND")
+        if start is None or end is None:
+            uid = self.event.get("UID") or "<missing UID>"
+            raise ValueError(f"Calendar event {uid} is missing DTSTART or DTEND")
+
+        return CalendarEventData(
+            uid=str(self.event.get("UID") or ""),
+            subject_id=self.subject_id,
+            original_subject=self.subject,
+            class_type=self.class_type,
+            group=self.group,
+            start=start,
+            end=end,
+            created=self.event.get("CREATED"),
+            location=str(self.event.get("LOCATION") or ""),
+        )
