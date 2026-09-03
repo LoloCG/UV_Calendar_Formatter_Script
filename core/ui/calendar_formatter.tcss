@@ -1,0 +1,254 @@
+Screen {
+    background: $background;
+}
+
+#main-content {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+}
+
+#intro {
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#file-actions,
+#output-actions,
+#change-actions,
+#collision-report-actions,
+#generation-actions,
+.dialog-actions {
+    width: 100%;
+    height: auto;
+    align-horizontal: left;
+}
+
+Button {
+    margin-right: 1;
+}
+
+#selected-path,
+#tracking-warning,
+#output-path,
+#status,
+#calendar-summary,
+#change-summary,
+#collision-summary,
+#collision-help {
+    width: 100%;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#selected-path {
+    color: $text-muted;
+    margin-bottom: 0;
+}
+
+#tracking-warning {
+    color: $warning;
+}
+
+#output-path {
+    width: 1fr;
+    color: $text-muted;
+}
+
+#status {
+    border-left: thick $primary;
+}
+
+#loader {
+    height: 3;
+}
+
+.section-title {
+    margin-top: 1;
+    text-style: bold;
+}
+
+#change-heading {
+    width: 100%;
+    height: 3;
+    margin-top: 1;
+    align-vertical: middle;
+}
+
+#change-title {
+    width: 1fr;
+    margin-top: 0;
+}
+
+#change-info {
+    width: 8;
+    height: 2;
+    margin: 0 0 0 1;
+    content-align: center middle;
+}
+
+#subject-table {
+    width: 100%;
+    height: 1fr;
+    min-height: 7;
+    border: solid $primary-background;
+}
+
+#change-table {
+    width: 100%;
+    height: 12;
+    min-height: 5;
+    border: solid $accent;
+}
+
+#change-summary {
+    border-left: thick $accent;
+}
+
+#collision-summary {
+    color: $text-muted;
+    border-left: thick $secondary;
+}
+
+#collision-content {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+}
+
+#collision-table {
+    width: 100%;
+    height: 12;
+    min-height: 7;
+    border: solid $secondary-background;
+}
+
+#collision-help {
+    color: $text-muted;
+}
+
+ConfirmGenerationScreen,
+ConfirmRememberScreen,
+ConfirmResetScreen,
+SubjectNameEditorScreen,
+CollisionDetailScreen,
+ComparisonInfoScreen,
+TextReportScreen {
+    align: center middle;
+    background: $background 70%;
+}
+
+#confirm-dialog {
+    width: 68;
+    height: auto;
+    padding: 1 2;
+    border: thick $primary;
+    background: $surface;
+}
+
+#confirm-title {
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#subject-editor-dialog {
+    width: 72;
+    height: auto;
+    padding: 1 2;
+    border: thick $primary;
+    background: $surface;
+}
+
+#subject-editor-title {
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#subject-original-name {
+    margin-bottom: 1;
+    color: $text-muted;
+}
+
+#subject-name-input {
+    margin-bottom: 1;
+}
+
+#subject-name-error {
+    min-height: 1;
+    margin-bottom: 1;
+    color: $error;
+}
+
+#collision-detail-dialog {
+    width: 82;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: thick $secondary;
+    background: $surface;
+}
+
+#collision-detail-title {
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#collision-detail-content {
+    margin-bottom: 1;
+}
+
+#comparison-info-dialog {
+    width: 88;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: thick $accent;
+    background: $surface;
+}
+
+#comparison-info-title {
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#comparison-info-content {
+    margin-bottom: 1;
+}
+
+#close-comparison-info {
+    width: 12;
+}
+
+#report-preview-dialog {
+    width: 95%;
+    height: 90%;
+    padding: 0 1;
+    border: thick $secondary;
+    background: $surface;
+}
+
+#report-preview-title {
+    height: 1;
+    margin: 0;
+    text-style: bold;
+}
+
+.report-preview-content {
+    width: 100%;
+    height: 1fr;
+    margin: 0;
+    border: solid $secondary-background;
+}
+
+#report-preview-actions {
+    width: 100%;
+    height: 2;
+    align-horizontal: right;
+}
+
+#close-report-preview {
+    width: 18;
+    height: 2;
+    margin: 0;
+    content-align: center middle;
+}

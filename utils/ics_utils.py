@@ -11,10 +11,8 @@ class ICSCalendarHandler:
     def _open_file(self, path:str|Path):
         ics_file_path = Path(path) if isinstance(path, str) else path 
 
-        # log.info(f"Searching for calendar file '{ics_file_path}'")
         if not ics_file_path.exists():
             msg = f"Calendar file not found: {ics_file_path.resolve()}"
-            # log.error(msg)
             raise FileNotFoundError(msg)
         self.filepath = ics_file_path
 

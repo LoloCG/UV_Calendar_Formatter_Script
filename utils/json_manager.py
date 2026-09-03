@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-from utils.logger import LoggerSingleton
-log = LoggerSingleton().get_logger()
 
 class JsonMng:
     def __init__(self, path: Path | str = "config.json"):
@@ -29,8 +27,6 @@ class JsonMng:
 
     def save_dict_to_config(self, data:dict, path=None, ensure_ascii:bool=False):
         if not path: path = self.path
-        log.info(f"Saving data to {path}")
-
         with open(path, 'w', encoding='utf-8') as json_file:
             json.dump(data, json_file, indent=2, ensure_ascii=ensure_ascii)
 
