@@ -6,6 +6,7 @@ Screen {
     width: 100%;
     height: 1fr;
     padding: 1 2;
+    overflow-x: hidden;
 }
 
 #intro {
@@ -26,6 +27,8 @@ Screen {
 
 Button {
     margin-right: 1;
+    height: 3;
+    border: none !important;
 }
 
 #selected-path,
@@ -56,7 +59,7 @@ Button {
 }
 
 #status {
-    border-left: thick $primary;
+    border-left: ascii $primary;
 }
 
 #loader {
@@ -91,36 +94,37 @@ Button {
     width: 100%;
     height: 1fr;
     min-height: 7;
-    border: solid $primary-background;
+    border: ascii $primary-background;
 }
 
 #change-table {
     width: 100%;
     height: 12;
     min-height: 5;
-    border: solid $accent;
+    border: ascii $accent;
 }
 
 #change-summary {
-    border-left: thick $accent;
+    border-left: ascii $accent;
 }
 
 #collision-summary {
     color: $text-muted;
-    border-left: thick $secondary;
+    border-left: ascii $secondary;
 }
 
 #collision-content {
     width: 100%;
     height: 1fr;
     padding: 1 2;
+    overflow-x: hidden;
 }
 
 #collision-table {
     width: 100%;
     height: 12;
     min-height: 7;
-    border: solid $secondary-background;
+    border: ascii $secondary-background;
 }
 
 #collision-help {
@@ -142,7 +146,7 @@ TextReportScreen {
     width: 68;
     height: auto;
     padding: 1 2;
-    border: thick $primary;
+    border: ascii $primary;
     background: $surface;
 }
 
@@ -155,7 +159,7 @@ TextReportScreen {
     width: 72;
     height: auto;
     padding: 1 2;
-    border: thick $primary;
+    border: ascii $primary;
     background: $surface;
 }
 
@@ -184,7 +188,7 @@ TextReportScreen {
     height: auto;
     max-height: 90%;
     padding: 1 2;
-    border: thick $secondary;
+    border: ascii $secondary;
     background: $surface;
 }
 
@@ -202,7 +206,7 @@ TextReportScreen {
     height: auto;
     max-height: 90%;
     padding: 1 2;
-    border: thick $accent;
+    border: ascii $accent;
     background: $surface;
 }
 
@@ -223,7 +227,7 @@ TextReportScreen {
     width: 95%;
     height: 90%;
     padding: 0 1;
-    border: thick $secondary;
+    border: ascii $secondary;
     background: $surface;
 }
 
@@ -237,7 +241,7 @@ TextReportScreen {
     width: 100%;
     height: 1fr;
     margin: 0;
-    border: solid $secondary-background;
+    border: ascii $secondary-background;
 }
 
 #report-preview-actions {

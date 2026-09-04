@@ -61,7 +61,10 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 table.focus(); table.action_select_cursor(); await pilot.pause()
                 app.screen.query_one("#subject-name-input", Input).value = "Custom subject"
                 await pilot.click("#save-subject-name")
-                await _wait_until(pilot, lambda: len(app.query("#subject-name-input")) == 0)
+                await _wait_until(
+                    pilot,
+                    lambda: app.working_subject_names.get("34082") == "Custom subject",
+                )
 
                 app._remember_confirmed(True)
                 await _wait_until(pilot, lambda: app._baseline_accepted_current)
@@ -80,8 +83,11 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_initial_screen_mounts_at_compact_terminal_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             app = CalendarFormatterApp(config_path=Path(directory) / "calendar_config.json", file_picker=lambda: None, suspend_file_picker=False)
-            async with app.run_test(size=(80, 24)):
-                self.assertFalse(app.query_one("#select-file", Button).disabled)
+            async with app.run_test(size=(80, 24)) as pilot:
+                await pilot.pause(0.12)
+                select_button = app.query_one("#select-file", Button)
+                self.assertFalse(select_button.disabled)
+                self.assertIs(select_button, app.focused)
                 self.assertTrue(app.query_one("#generate-calendar", Button).disabled)
                 self.assertEqual(default_desktop_directory() / "new_calendar.ics", app.output_path)
                 self.assertEqual(0, len(app.query("#state-path")))

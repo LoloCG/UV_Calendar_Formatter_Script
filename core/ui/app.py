@@ -8,6 +8,7 @@ from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.scrollbar import ScrollBar, ScrollBarRender
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, LoadingIndicator, Static, TextArea
 
@@ -20,6 +21,16 @@ from core.tracking_workflow import analyze_with_baseline
 from reports.change_report import default_change_report_path, render_change_report, write_change_report
 from reports.collision_report import default_collision_report_path, render_collision_report, write_collision_report
 from utils.file_selector import default_desktop_directory, pick_file, pick_save_file
+
+
+class SolidScrollBarRender(ScrollBarRender):
+    """Render scrollbars without font-dependent fractional block glyphs."""
+
+    VERTICAL_BARS = [" "] * 8
+    HORIZONTAL_BARS = [" "] * 8
+
+
+ScrollBar.renderer = SolidScrollBarRender
 
 
 FilePicker = Callable[[], Path | None]
@@ -221,7 +232,7 @@ class CollisionReviewScreen(Screen[None]):
     BINDINGS = [("escape", "go_back", "Back")]
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield Header(icon="")
         with VerticalScroll(id="collision-content"):
             yield Label("Collision analysis", classes="screen-title")
             yield Static("", id="collision-full-summary")
@@ -233,7 +244,7 @@ class CollisionReviewScreen(Screen[None]):
                 yield Button("View report", id="view-collision-report", variant="primary")
                 yield Button("Save collision report", id="save-collision-report")
                 yield Button("Back", id="back-from-collisions")
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     @property
     def formatter(self) -> CalendarFormatterApp:
@@ -316,7 +327,7 @@ class CalendarFormatterApp(App[None]):
         self._baseline_accepted_current = False
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield Header(icon="")
         with VerticalScroll(id="main-content"):
             yield Label("Select a University of Valencia ICS calendar to inspect and format.", id="intro")
             with Horizontal(id="file-actions"):
@@ -348,7 +359,7 @@ class CalendarFormatterApp(App[None]):
                 yield Button("Choose output…", id="choose-output")
             with Horizontal(id="generation-actions"):
                 yield Button("Generate formatted ICS", id="generate-calendar", variant="success", disabled=True)
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         self.query_one("#loader", LoadingIndicator).display = False
@@ -368,6 +379,18 @@ class CalendarFormatterApp(App[None]):
         tracking_warning = self.query_one("#tracking-warning", Static)
         tracking_warning.update(self._tracking_warning)
         tracking_warning.display = bool(self._tracking_warning)
+
+    def on_ready(self) -> None:
+        """Give Windows terminals a second complete first-frame repaint."""
+
+        self.query_one("#select-file", Button).focus()
+        self.set_timer(0.08, self._repaint_initial_frame, name="initial-frame-repaint")
+
+    def _repaint_initial_frame(self) -> None:
+        # Some terminal hosts do not present Textual's first alternate-screen
+        # frame until an input event arrives. Repainting once after the event
+        # loop is live makes startup independent of a key press.
+        self.refresh(repaint=True, layout=True)
 
     @on(Button.Pressed, "#select-file")
     def select_file(self) -> None:
