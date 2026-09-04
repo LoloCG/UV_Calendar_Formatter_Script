@@ -1,3 +1,2 @@
-pandas
-ics
-textual
+ics==0.7.3
+textual==8.2.8

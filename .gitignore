@@ -1,8 +1,11 @@
 horari_2026_.ics
 __pycache__
 .venv
+.venv-linux/
 calendar_config.json
 calendar_config.json.legacy.bak
 data/
 new_calendar.ics
 test_files/
+build/
+dist/
