@@ -16,6 +16,7 @@ from core.calendar_workflow import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_PATH, gen
 from core.change_tracking import compare_calendars
 from core.collision_detector import analyze_collisions, collision_category, orient_collision
 from core.models import CalendarComparison, CalendarEventData, CollisionAnalysis, CollisionPair, GenerationResult, LoadedCalendar
+from core.semantic import event_location_identity
 from core.state_store import CalendarStateStore
 from core.tracking_workflow import analyze_with_baseline
 from reports.change_report import default_change_report_path, render_change_report, write_change_report
@@ -79,30 +80,6 @@ class ConfirmRememberScreen(ModalScreen[bool]):
         self.dismiss(False)
 
     @on(Button.Pressed, "#confirm-remember")
-    def confirm(self) -> None:
-        self.dismiss(True)
-
-
-class ConfirmResetScreen(ModalScreen[bool]):
-    def __init__(self, data_dir: Path, reason: str = "") -> None:
-        super().__init__()
-        self.data_dir = data_dir
-        self.reason = reason
-
-    def compose(self) -> ComposeResult:
-        warning = f"\n\nWhy this may be needed: {self.reason}" if self.reason else ""
-        with Vertical(id="confirm-dialog"):
-            yield Label("Start a new course?", id="confirm-title")
-            yield Static(f"This removes the saved aliases, baseline, and latest comparison from {self.data_dir}. The currently loaded calendar remains open.{warning}")
-            with Horizontal(classes="dialog-actions"):
-                yield Button("Cancel", id="cancel-reset")
-                yield Button("New course reset", id="confirm-reset", variant="error")
-
-    @on(Button.Pressed, "#cancel-reset")
-    def cancel(self) -> None:
-        self.dismiss(False)
-
-    @on(Button.Pressed, "#confirm-reset")
     def confirm(self) -> None:
         self.dismiss(True)
 
@@ -322,7 +299,6 @@ class CalendarFormatterApp(App[None]):
         self.modified_subject_ids: set[str] = set()
         self._subject_names_ready = self._busy = False
         self._tracking_available = True
-        self._tracking_writable = True
         self._tracking_warning = ""
         self._baseline_accepted_current = False
 
@@ -347,7 +323,6 @@ class CalendarFormatterApp(App[None]):
                 yield Button("View changes", id="view-changes", variant="primary", disabled=True)
                 yield Button("Save change report", id="save-change-report", disabled=True)
                 yield Button("Remember as baseline", id="remember-baseline", variant="success", disabled=True)
-                yield Button("New course reset", id="new-course-reset")
             yield Label("Collision status", classes="section-title")
             yield Static("Select a calendar to calculate timetable collisions.", id="collision-summary")
             yield Button("Review collisions", id="review-collisions", disabled=True)
@@ -372,9 +347,11 @@ class CalendarFormatterApp(App[None]):
             changes.add_column(title, key=key)
         changes.cursor_type, changes.zebra_stripes = "row", True
         changes.display = False
+        self.query_one("#view-changes", Button).display = False
+        self.query_one("#save-change-report", Button).display = False
         writable, warning = self.state_store.is_writable()
         if not writable:
-            self._tracking_available = self._tracking_writable = False
+            self._tracking_available = False
             self._tracking_warning = warning
         tracking_warning = self.query_one("#tracking-warning", Static)
         tracking_warning.update(self._tracking_warning)
@@ -437,7 +414,10 @@ class CalendarFormatterApp(App[None]):
             self.call_from_thread(self._load_failed, error); return
         warning, tracking_available = self._tracking_warning, self._tracking_available
         try:
+            original_events = loaded.events
             comparison, analysis_warning = analyze_with_baseline(self.state_store, loaded, collisions, calendar_loader=self._calendar_loader, persist_last_check=tracking_available)
+            if loaded.events is not original_events:
+                collisions = self._collision_analyzer(loaded.events)
             if analysis_warning:
                 warning = analysis_warning
                 tracking_available = False
@@ -474,7 +454,7 @@ class CalendarFormatterApp(App[None]):
         self._populate_change_table(); self._refresh_change_summary(); self._refresh_collision_summary(); self._refresh_calendar_summary()
         self._set_busy(False, "")
         if comparison.possibly_unrelated:
-            self.notify(f"Possibly unrelated calendar: {comparison.unrelated_reason}. Use New course reset only if this is a different academic year.", title="Review required", severity="warning", timeout=10)
+            self.notify(f"Possibly unrelated calendar: {comparison.unrelated_reason}. For a new academic year, close the app, delete {self.state_store.data_dir}, restart, and load the calendar again.", title="Review required", severity="warning", timeout=10)
 
     def _load_failed(self, error: Exception) -> None:
         self.loaded_calendar = self.collision_analysis = self.comparison = None
@@ -522,11 +502,11 @@ class CalendarFormatterApp(App[None]):
 
     @on(Button.Pressed, "#view-changes")
     def view_changes(self) -> None:
-        if self.comparison: self.push_screen(TextReportScreen("Calendar change report", render_change_report(self.comparison, self.working_subject_names), "change-report-content"))
+        if self.comparison and self.comparison.status != "first": self.push_screen(TextReportScreen("Calendar change report", render_change_report(self.comparison, self.working_subject_names), "change-report-content"))
 
     @on(Button.Pressed, "#save-change-report")
     def save_change_report(self) -> None:
-        if self.comparison is None or self._busy: return
+        if self.comparison is None or self.comparison.status == "first" or self._busy: return
         self._set_busy(True, "Saving change report…"); self._write_change_report(self.comparison, dict(self.working_subject_names), self.change_report_path)
 
     @work(thread=True, exclusive=True, group="change-report")
@@ -561,30 +541,6 @@ class CalendarFormatterApp(App[None]):
 
     def _baseline_failed(self, error: Exception) -> None:
         self._set_busy(False, "Baseline was not changed."); self._show_error(f"Could not remember the baseline: {error}")
-
-    @on(Button.Pressed, "#new-course-reset")
-    def request_reset(self) -> None:
-        if self._busy or not self._tracking_writable: return
-        reason = self.comparison.unrelated_reason if self.comparison and self.comparison.possibly_unrelated else ""
-        self.push_screen(ConfirmResetScreen(self.state_store.data_dir, reason), self._reset_confirmed)
-
-    def _reset_confirmed(self, confirmed: bool | None) -> None:
-        if not confirmed: return
-        try:
-            self.state_store.reset()
-            self._tracking_available = True
-            self._tracking_warning = ""
-            tracking_warning = self.query_one("#tracking-warning", Static)
-            tracking_warning.update("")
-            tracking_warning.display = False
-            if self.loaded_calendar:
-                self.comparison = compare_calendars(None, self.loaded_calendar, current_collisions=self.collision_analysis)
-                self.working_subject_names = self.initial_subject_names = dict(self.loaded_calendar.subject_catalog)
-            self.configured_subject_ids = frozenset(); self.modified_subject_ids.clear(); self._baseline_accepted_current = False
-            self._populate_change_table(); self._refresh_change_summary(); self._refresh_subject_table_names()
-            self._set_busy(False, "Academic-year tracking state was reset. The loaded calendar is now a first analysis.")
-            self.notify("Academic-year tracking state was reset.", severity="warning")
-        except Exception as error: self._show_error(f"Could not reset the academic-year data: {error}")
 
     @on(Button.Pressed, "#choose-output")
     def choose_output(self) -> None:
@@ -653,9 +609,12 @@ class CalendarFormatterApp(App[None]):
         self.query_one("#generate-calendar", Button).disabled = busy or self.loaded_calendar is None or not self._subject_names_ready
         self.query_one("#review-collisions", Button).disabled = busy or self.collision_analysis is None
         self.query_one("#change-info", Button).disabled = busy or self.comparison is None
-        self.query_one("#view-changes", Button).disabled = busy or self.comparison is None; self.query_one("#save-change-report", Button).disabled = busy or self.comparison is None
+        has_baseline_comparison = self.comparison is not None and self.comparison.status != "first"
+        view_changes = self.query_one("#view-changes", Button)
+        save_change_report = self.query_one("#save-change-report", Button)
+        view_changes.display = save_change_report.display = has_baseline_comparison
+        view_changes.disabled = save_change_report.disabled = busy or not has_baseline_comparison
         self.query_one("#remember-baseline", Button).disabled = busy or not self._tracking_available or self.comparison is None or not self.comparison.can_remember or self._baseline_accepted_current
-        self.query_one("#new-course-reset", Button).disabled = busy or not self._tracking_writable
 
     def _refresh_calendar_summary(self) -> None:
         if self.loaded_calendar: self.query_one("#calendar-summary", Static).update(f"Events: {len(self.loaded_calendar.events)}    Unique subjects: {len(self.loaded_calendar.subject_catalog)}")
@@ -683,7 +642,9 @@ class CalendarFormatterApp(App[None]):
             text = f"Calendar changed: {summary['added']} added, {summary['removed']} removed, {summary['modified']} modified"
             if summary["ambiguous"]:
                 text += f", {summary['ambiguous']} need review"
-        if comparison.possibly_unrelated: text += f"\nPossibly unrelated calendar: {comparison.unrelated_reason}. Confirm New course reset before replacing this academic year."
+        if comparison.possibly_unrelated: text += f"\nPossibly unrelated calendar: {comparison.unrelated_reason}. For a new academic year, close the app, delete the portable data folder, restart, and load it again."
+        review_count = sum(diagnostic.severity == "review" for diagnostic in comparison.projection_diagnostics)
+        if review_count: text += f"\nProjection review required: {review_count} diagnostic(s)."
         if self._baseline_accepted_current: text += "\nRemembered as the current baseline."
         self.query_one("#change-summary", Static).update(text)
 
@@ -692,7 +653,15 @@ class CalendarFormatterApp(App[None]):
         if self.comparison is None:
             table.display = False
             return
-        table.display = self.comparison.status == "changed" and bool(self.comparison.event_changes or self.comparison.warnings)
+        review_diagnostics = tuple(
+            diagnostic
+            for diagnostic in self.comparison.projection_diagnostics
+            if diagnostic.severity == "review"
+        )
+        table.display = bool(
+            (self.comparison.status == "changed" and (self.comparison.event_changes or self.comparison.warnings))
+            or review_diagnostics
+        )
         for index, change in enumerate(self.comparison.event_changes):
             event = change.current or change.before; title = self.event_display_name(event)
             label = ", ".join(change.categories).title() if change.categories else change.change.title()
@@ -700,6 +669,21 @@ class CalendarFormatterApp(App[None]):
         for index, warning in enumerate(self.comparison.warnings):
             event = warning.current_candidates[0] if warning.current_candidates else warning.baseline_candidates[0]
             table.add_row(event.start.date().isoformat(), "Needs review", self.event_display_name(event), f"{len(warning.baseline_candidates)} candidates", f"{len(warning.current_candidates)} candidates", key=f"warning-{index}")
+        events_by_uid = {
+            event.uid: event
+            for event in (self.loaded_calendar.events if self.loaded_calendar else ())
+            if event.uid
+        }
+        for index, diagnostic in enumerate(review_diagnostics):
+            event = events_by_uid.get(diagnostic.event_uid or "")
+            table.add_row(
+                event.start.date().isoformat() if event else "—",
+                "Needs review",
+                self.event_display_name(event) if event else diagnostic.code,
+                diagnostic.message,
+                "—",
+                key=f"projection-warning-{index}",
+            )
 
     def event_display_name(self, event: CalendarEventData) -> str:
         subject = self.working_subject_names.get(event.subject_id, event.original_subject)
@@ -754,9 +738,16 @@ def _comparison_info_text(comparison: CalendarComparison) -> str:
         f"  Analysed (UTC): {comparison.analyzed_at_utc}",
         f"  Source SHA-256: {comparison.source_sha256}",
         f"  Canonical SHA-256: {comparison.canonical_sha256}",
+        f"  Detected format: {comparison.current_source_format.adapter_id} "
+        f"({comparison.current_source_format.confidence:.0%} confidence)",
     ]
     baseline = comparison.baseline_metadata or {}
     if baseline:
+        baseline_format = (
+            comparison.baseline_source_format.adapter_id
+            if comparison.baseline_source_format
+            else baseline.get("source_format", "unknown")
+        )
         date_range = baseline.get("date_range") or {}
         range_text = "—"
         if date_range:
@@ -765,6 +756,7 @@ def _comparison_info_text(comparison: CalendarComparison) -> str:
             [
                 "",
                 "Accepted baseline",
+                f"  Detected format: {baseline_format}",
                 f"  Source: {baseline.get('source_name', '—')}",
                 f"  Analysed (UTC): {baseline.get('analyzed_at_utc', '—')}",
                 f"  Accepted (UTC): {baseline.get('accepted_at_utc', '—')}",
@@ -778,9 +770,21 @@ def _comparison_info_text(comparison: CalendarComparison) -> str:
         )
     else:
         lines.extend(["", "Accepted baseline", "  None"])
+    if comparison.projection_diagnostics:
+        lines.extend(("", "Projection diagnostics"))
+        lines.extend(
+            f"  [{diagnostic.severity.upper()}] {diagnostic.message}"
+            for diagnostic in comparison.projection_diagnostics
+        )
     return "\n".join(lines)
 
 
 def _event_detail(heading: str, event: CalendarEventData, subject_names: Mapping[str, str]) -> str:
     subject = subject_names.get(event.subject_id, event.original_subject)
-    return "\n".join((f"{heading}: {subject}", f"Subject ID: {event.subject_id or '—'}", f"Activity: {event.class_type or '—'}", f"Group: {event.group or '—'}", f"Session: {event.start:%Y-%m-%d %H:%M}–{event.end:%H:%M}", f"Location: {event.location or '—'}", f"UID: {event.uid or '—'}"))
+    location = event_location_identity(event)
+    provenance = (
+        f" ({location.provenance}, {location.state})"
+        if location.state != "known"
+        else ""
+    )
+    return "\n".join((f"{heading}: {subject}", f"Subject ID: {event.subject_id or '—'}", f"Activity: {event.class_type or '—'}", f"Group: {event.group or '—'}", f"Session: {event.start:%Y-%m-%d %H:%M}–{event.end:%H:%M}", f"Location: {event.location or '—'}{provenance}", f"UID: {event.uid or '—'}"))

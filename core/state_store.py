@@ -220,6 +220,7 @@ class CalendarStateStore:
             "application_version": APPLICATION_VERSION,
             "parser_data_version": PARSER_DATA_VERSION,
             "source_name": loaded.source_path.name,
+            "source_format": loaded.source_format.adapter_id,
             "source_sha256": source_hash,
             "raw_ics_path": f"baseline/{source_hash}.ics",
             "canonical_sha256": comparison.canonical_sha256,

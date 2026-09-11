@@ -133,7 +133,6 @@ Button {
 
 ConfirmGenerationScreen,
 ConfirmRememberScreen,
-ConfirmResetScreen,
 SubjectNameEditorScreen,
 CollisionDetailScreen,
 ComparisonInfoScreen,

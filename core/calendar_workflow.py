@@ -3,8 +3,9 @@ from datetime import datetime
 from pathlib import Path
 
 from core.activity_policy import blocks_calendar_time
-from core.ics_formatter import UVEventFormatter
 from core.models import GenerationResult, LoadedCalendar
+from core.semantic import event_location_identity, resolve_same_calendar_location_fallbacks
+from core.source_formats import project_calendar
 from core.state_store import CalendarStateStore, portable_state_path
 from core.subject_catalog import build_subject_catalog
 from utils.ics_compat import disable_parser_colorization
@@ -21,16 +22,20 @@ def load_calendar(path: str | Path) -> LoadedCalendar:
     disable_parser_colorization()
     source_path = Path(path)
     handler = ICSCalendarHandler(source_path)
-    events = tuple(
-        UVEventFormatter(event_dict).to_event_data()
-        for event_dict in handler.as_dicts()
-    )
-    return LoadedCalendar(
+    raw_events = handler.as_raw_events()
+    source_metadata = handler.source_metadata()
+    projection = project_calendar(source_metadata, raw_events)
+    loaded = LoadedCalendar(
         source_path=source_path,
         preamble=handler.get_preamble(),
-        events=events,
-        subject_catalog=build_subject_catalog(events),
+        events=projection.events,
+        subject_catalog=build_subject_catalog(projection.events),
+        raw_events=raw_events,
+        source_metadata=source_metadata,
+        source_format=projection.evidence,
+        projection_diagnostics=projection.diagnostics,
     )
+    return resolve_same_calendar_location_fallbacks(loaded)
 
 
 def prepare_subject_names(
@@ -83,12 +88,16 @@ def generate_formatted_calendar(
         )
         opaque = blocks_calendar_time(event.class_type)
 
+        description = f"({event.subject_id}) - {event.class_type} grupo {event.group}."
+        location_identity = event_location_identity(event)
+        if location_identity.state == "inferred":
+            description += (
+                f" Location inferred from {location_identity.provenance}."
+            )
         edited_event = {
             "UID": event.uid,
             "SUMMARY": f"{subject} - {event.class_type}",
-            "DESCRIPTION": (
-                f"({event.subject_id}) - {event.class_type} grupo {event.group}."
-            ),
+            "DESCRIPTION": description,
             "CREATED": event.created,
             "LAST_MODIFIED": datetime.now(),
             "DTSTART": event.start,

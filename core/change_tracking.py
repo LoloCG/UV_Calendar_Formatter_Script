@@ -18,11 +18,18 @@ from core.models import (
     EventChange,
     LoadedCalendar,
     MatchWarning,
+    ProjectionDiagnostic,
+)
+from core.semantic import (
+    event_activity_key,
+    event_location_identity,
+    location_relation,
+    location_signature,
 )
 from core.text_utils import normalize_label
 
 
-PARSER_DATA_VERSION = 1
+PARSER_DATA_VERSION = 2
 UNRELATED_SUBJECT_OVERLAP = 0.25
 UNRELATED_DATE_OVERLAP = 0.25
 UNRELATED_DATE_GAP_DAYS = 90
@@ -50,11 +57,11 @@ def subject_key(event: CalendarEventData) -> str:
 def canonical_signature(event: CalendarEventData) -> tuple[str, ...]:
     return (
         subject_key(event),
-        normalize_label(event.class_type),
+        event_activity_key(event),
         normalize_label(event.group),
         _utc_value(event.start),
         _utc_value(event.end),
-        normalize_label(event.location),
+        location_signature(event),
     )
 
 
@@ -90,6 +97,7 @@ def compare_calendars(
     analyzed_at = analyzed_at_utc or utc_now_iso()
     current_hash = canonical_sha256(current.events)
     current_source_hash = source_sha256(current.source_path)
+    projection_diagnostics = tuple(current.projection_diagnostics)
     if baseline is None:
         return CalendarComparison(
             status="first",
@@ -97,9 +105,14 @@ def compare_calendars(
             source_name=current.source_path.name,
             source_sha256=current_source_hash,
             canonical_sha256=current_hash,
+            current_source_format=current.source_format,
+            projection_diagnostics=projection_diagnostics,
         )
 
     baseline_hash = canonical_sha256(baseline.events)
+    projection_diagnostics = (
+        tuple(baseline.projection_diagnostics) + projection_diagnostics
+    )
     metadata = dict(baseline_metadata or {})
     baseline_source_hash = metadata.get("source_sha256") or source_sha256(
         baseline.source_path
@@ -116,10 +129,16 @@ def compare_calendars(
             baseline_metadata=metadata,
             baseline_canonical_sha256=baseline_hash,
             baseline_source_sha256=baseline_source_hash,
+            current_source_format=current.source_format,
+            baseline_source_format=baseline.source_format,
+            projection_diagnostics=projection_diagnostics,
         )
 
     matches, warnings = _match_events(baseline.events, current.events)
-    event_changes = _event_changes(baseline.events, current.events, matches)
+    event_changes, comparison_diagnostics = _event_changes(
+        baseline.events, current.events, matches
+    )
+    projection_diagnostics += comparison_diagnostics
     baseline_analysis = baseline_collisions or analyze_collisions(baseline.events)
     current_analysis = current_collisions or analyze_collisions(current.events)
     collision_changes = _collision_changes(
@@ -148,6 +167,9 @@ def compare_calendars(
         event_matches=tuple(sorted(matches.items())),
         possibly_unrelated=unrelated,
         unrelated_reason=unrelated_reason,
+        current_source_format=current.source_format,
+        baseline_source_format=baseline.source_format,
+        projection_diagnostics=projection_diagnostics,
     )
 
 
@@ -198,16 +220,20 @@ def unrelated_calendar_reason(
 
 
 def event_to_record(event: CalendarEventData) -> dict[str, str]:
+    location = event_location_identity(event)
     return {
         "subject_id": event.subject_id,
         "subject": event.original_subject,
-        "activity_type": normalize_label(event.class_type),
+        "activity_type": event_activity_key(event),
         "group": normalize_label(event.group),
         "start": _utc_value(event.start),
         "end": _utc_value(event.end),
         "source_start": event.start.isoformat(),
         "source_end": event.end.isoformat(),
         "location": " ".join(event.location.split()),
+        "location_key": "|".join(location.canonical_key or ("", "")),
+        "location_state": location.state,
+        "location_provenance": location.provenance,
     }
 
 
@@ -256,7 +282,22 @@ def comparison_to_record(comparison: CalendarComparison, accepted_at: str) -> di
         "previous_canonical_sha256": comparison.baseline_canonical_sha256,
         "current_canonical_sha256": comparison.canonical_sha256,
         "current_source_name": comparison.source_name,
+        "current_source_format": comparison.current_source_format.adapter_id,
+        "previous_source_format": (
+            comparison.baseline_source_format.adapter_id
+            if comparison.baseline_source_format
+            else None
+        ),
         "summary": comparison.summary,
+        "projection_diagnostics": [
+            {
+                "code": diagnostic.code,
+                "message": diagnostic.message,
+                "severity": diagnostic.severity,
+                "event_uid": diagnostic.event_uid,
+            }
+            for diagnostic in comparison.projection_diagnostics
+        ],
         "event_changes": event_records,
         "collision_changes": collision_records,
     }
@@ -419,7 +460,7 @@ def _time_distance(first, second):
 
 def _weak_confidence(first, second):
     exact_interval = first.start == second.start and first.end == second.end
-    same_location = normalize_label(first.location) == normalize_label(second.location)
+    same_location = location_relation(first, second) == "equal"
     close = abs((first.start - second.start).total_seconds()) <= 7 * 86400
     return exact_interval or (same_location and close)
 
@@ -427,13 +468,14 @@ def _weak_confidence(first, second):
 def _strong_key(event):
     return (
         subject_key(event),
-        normalize_label(event.class_type),
+        event_activity_key(event),
         normalize_label(event.group),
     )
 
 
 def _event_changes(baseline, current, matches):
     changes: list[EventChange] = []
+    diagnostics: list[ProjectionDiagnostic] = []
     for old, new in sorted(matches.items(), key=lambda item: current[item[1]].start):
         first, second = baseline[old], current[new]
         fields: dict[str, tuple[str, str]] = {}
@@ -444,13 +486,28 @@ def _event_changes(baseline, current, matches):
                 f"{second.start.isoformat()} / {second.end.isoformat()}",
             )
             categories.append("rescheduled")
-        if normalize_label(first.location) != normalize_label(second.location):
+        location_result = location_relation(first, second)
+        if location_result == "relocated":
             fields["location"] = (first.location, second.location)
             categories.append("relocated")
+        elif location_result == "review":
+            diagnostics.append(
+                ProjectionDiagnostic(
+                    code="location-comparison-review",
+                    message=(
+                        f"Location comparison for subject "
+                        f"{second.subject_id or first.subject_id or 'unknown'} needs review "
+                        "because one or both projections are unavailable, unknown, "
+                        "conflicting, or inferred differently."
+                    ),
+                    severity="review",
+                    event_uid=second.uid or first.uid or None,
+                )
+            )
         if normalize_label(first.group) != normalize_label(second.group):
             fields["group"] = (first.group, second.group)
             categories.append("regrouped")
-        if normalize_label(first.class_type) != normalize_label(second.class_type):
+        if event_activity_key(first) != event_activity_key(second):
             fields["activity_type"] = (first.class_type, second.class_type)
             categories.append("retyped")
         if categories:
@@ -473,7 +530,7 @@ def _event_changes(baseline, current, matches):
         EventChange(change="added", current=current[index])
         for index in sorted(set(range(len(current))) - matched_new, key=lambda i: current[i].start)
     )
-    return tuple(sorted(changes, key=_change_sort_key))
+    return tuple(sorted(changes, key=_change_sort_key)), tuple(diagnostics)
 
 
 def _collision_changes(

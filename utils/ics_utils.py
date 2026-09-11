@@ -2,10 +2,15 @@ from datetime import datetime
 from pathlib import Path
 from ics import Calendar, Event
 
+from core.models import CalendarSourceMetadata, RawCalendarEvent
+
 
 class ICSCalendarHandler:
     def __init__(self, ics_filepath):
-        self.filepath = None  
+        self.filepath = None
+        self._source_text = ""
+        self._has_utf8_bom = False
+        self._raw_events: tuple[RawCalendarEvent, ...] | None = None
         self.calendar = self._open_file(ics_filepath)
 
     def _open_file(self, path:str|Path):
@@ -16,45 +21,92 @@ class ICSCalendarHandler:
             raise FileNotFoundError(msg)
         self.filepath = ics_file_path
 
-        with open(ics_file_path, 'r', encoding='utf-8-sig') as f:
-            return Calendar(f.read())
+        source_bytes = ics_file_path.read_bytes()
+        self._has_utf8_bom = source_bytes.startswith(b"\xef\xbb\xbf")
+        # Match text-mode universal-newline behavior while reading the file once.
+        self._source_text = (
+            source_bytes.decode("utf-8-sig")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+        )
+        return Calendar(self._source_text)
+
+    def as_raw_events(self) -> tuple[RawCalendarEvent, ...]:
+        """Return typed source values before any UV-specific interpretation."""
+
+        if self._raw_events is None:
+            events = []
+            for event in self.calendar.events:
+                events.append(
+                    RawCalendarEvent(
+                        uid=ICSHelpers._optional_stringify(
+                            getattr(event, "uid", None)
+                        ),
+                        summary=ICSHelpers._optional_stringify(
+                            getattr(event, "name", None)
+                        ),
+                        description=ICSHelpers._optional_stringify(
+                            getattr(event, "description", None), sep=" "
+                        ),
+                        classification=ICSHelpers._optional_stringify(
+                            getattr(event, "classification", None)
+                        ),
+                        categories=ICSHelpers._optional_stringify(
+                            getattr(event, "categories", None), sep=", "
+                        ),
+                        created=ICSHelpers._to_datetime(
+                            getattr(event, "created", None)
+                        ),
+                        last_modified=ICSHelpers._to_datetime(
+                            getattr(event, "last_modified", None)
+                        ),
+                        start=ICSHelpers._to_datetime(getattr(event, "begin", None)),
+                        end=ICSHelpers._to_datetime(getattr(event, "end", None)),
+                        location=ICSHelpers._optional_stringify(
+                            getattr(event, "location", None)
+                        ),
+                    )
+                )
+            self._raw_events = tuple(events)
+        return self._raw_events
 
     def as_dicts(self)-> list:
-        calendar = self.calendar
-        events = []
-        for event in calendar.events:
-            # categories and descriptions may contain multiple lines, 
-            # thus the type is found as a list or touple of values.
-            categories_str  = ICSHelpers._stringify(getattr(event, "categories", None), sep=", ")
-            description_str = ICSHelpers._stringify(getattr(event, "description", None), sep=" ")
-            
-            events.append({
-                'UID':getattr(event, 'uid', None),
-                'SUMMARY': getattr(event, 'name', '') or '',
-                'DESCRIPTION': description_str,
-                'CLASSIFICATION': getattr(event, 'classification', None),
-                'CATEGORIES': categories_str,
-                'CREATED': ICSHelpers._to_datetime(getattr(event, 'created', None)),
-                'LAST_MODIFIED': ICSHelpers._to_datetime(getattr(event, 'last_modified', None)),
-                'DTSTART': ICSHelpers._to_datetime(getattr(event, 'begin', None)),
-                'DTEND':   ICSHelpers._to_datetime(getattr(event, 'end', None)),
-                'LOCATION': getattr(event, 'location', None)
-            })
-        
-        return events
+        """Compatibility projection for callers that still consume dictionaries."""
+
+        return [
+            {
+                "UID": event.uid,
+                "SUMMARY": event.summary or "",
+                "DESCRIPTION": event.description or "",
+                "CLASSIFICATION": event.classification,
+                "CATEGORIES": event.categories or "",
+                "CREATED": event.created,
+                "LAST_MODIFIED": event.last_modified,
+                "DTSTART": event.start,
+                "DTEND": event.end,
+                "LOCATION": event.location,
+            }
+            for event in self.as_raw_events()
+        ]
+
+    def source_metadata(self) -> CalendarSourceMetadata:
+        """Return source metadata useful for future format-adapter scoring."""
+
+        preamble = self.get_preamble()
+        return CalendarSourceMetadata(
+            prodid=ICSHelpers._property_value(preamble, "PRODID"),
+            calendar_name=ICSHelpers._property_value(preamble, "X-WR-CALNAME"),
+            has_utf8_bom=self._has_utf8_bom,
+        )
 
     def get_preamble(self) -> str:
         """
         Return the original VCALENDAR preamble (everything before first VEVENT).
         This keeps source metadata/timezone definitions in regenerated files.
         """
-        if self.filepath is None:
-            return ""
-        with open(self.filepath, "r", encoding="utf-8-sig") as f:
-            raw = f.read()
         marker = "BEGIN:VEVENT"
-        idx = raw.find(marker)
-        return raw[:idx] if idx != -1 else ""
+        idx = self._source_text.find(marker)
+        return self._source_text[:idx] if idx != -1 else ""
 
 class ICSGenerator:
     def __init__(self, preamble: str | None = None):
@@ -160,6 +212,31 @@ class ICSHelpers:
         except TypeError:
             # Not iterable; fall back to plain str
             return str(value)
+
+    @staticmethod
+    def _optional_stringify(value, sep: str = ", ") -> str | None:
+        """Stringify a present value without collapsing absence to empty text."""
+
+        if value is None:
+            return None
+        return ICSHelpers._stringify(value, sep=sep)
+
+    @staticmethod
+    def _property_value(calendar_text: str, property_name: str) -> str | None:
+        """Read one unfolded top-level calendar property from a preamble."""
+
+        unfolded: list[str] = []
+        for line in calendar_text.splitlines():
+            if line.startswith((" ", "\t")) and unfolded:
+                unfolded[-1] += line[1:]
+            else:
+                unfolded.append(line)
+        expected = property_name.casefold()
+        for line in unfolded:
+            header, separator, value = line.partition(":")
+            if separator and header.partition(";")[0].casefold() == expected:
+                return ICSHelpers.ics_unescape(value)
+        return None
 
     @staticmethod
     def ics_unescape(s: str) -> str:

@@ -1,113 +1,64 @@
-import re
+"""Compatibility wrapper around the source-adapter projection pipeline."""
 
-from core.models import CalendarEventData
+from __future__ import annotations
+
+from dataclasses import replace
+
+from core.models import CalendarSourceMetadata, RawCalendarEvent
+from core.source_formats import project_calendar
+
 
 class UVEventFormatter:
-    _GROUP_TYPE_RE = re.compile(r'Grupo\s+(?P<type>.+?)\s+(?P<tag>[A-Za-z0-9-]+)\s*$',re.IGNORECASE)
-    _CODE_PREFIX_RE = re.compile(r'^\s*(?P<code>\d{4,6})\s*[-–—]\s*')        # 5-digit code + hyphen/en dash/em dash
-    _GRUPO_TRAILER_RE = re.compile(r'\s+Grupo\s+.+$', re.IGNORECASE)       # strip trailing "Grupo ..."
-    # 2026 UV export: "34082 - Subject(TEORÍA (34082))"
-    _NEW_SUMMARY_RE = re.compile(
-        r'^(?P<subject>.+?)\s*\((?P<type>[^()]+?)\s+\(\d{4,6}\)\)\s*$'
-    )
-    # In the 2026 export, the group moved to DESCRIPTION: "DG-T - Grupo Teoría".
-    _NEW_DESCRIPTION_RE = re.compile(
-        r'^(?P<tag>[A-Za-z0-9-]+)\s*-\s*Grupo\s+(?P<type>.+?)\s*$',
-        re.IGNORECASE,
-    )
+    """Project one legacy event dictionary through the adapter registry.
 
-    def __init__(self, event_dict:dict):
+    New code should project a complete calendar with
+    :func:`core.source_formats.project_calendar`; this wrapper remains for
+    callers that previously constructed ``UVEventFormatter`` directly.
+    """
+
+    def __init__(self, event_dict: dict):
         self.event = event_dict
+        raw = RawCalendarEvent(
+            uid=_optional_text(event_dict.get("UID")),
+            summary=_optional_text(event_dict.get("SUMMARY")),
+            description=_optional_text(event_dict.get("DESCRIPTION")),
+            classification=_optional_text(event_dict.get("CLASSIFICATION")),
+            categories=_optional_text(event_dict.get("CATEGORIES")),
+            created=event_dict.get("CREATED"),
+            last_modified=event_dict.get("LAST_MODIFIED"),
+            start=event_dict.get("DTSTART"),
+            end=event_dict.get("DTEND"),
+            location=_optional_text(event_dict.get("LOCATION")),
+        )
+        self._parsed = project_calendar(CalendarSourceMetadata(), (raw,)).events[0]
+        self._sync_values()
 
-        self.subject_id: str    = ""
-        self.subject: str       = ""
-        self.group: str         = ""
-        self.class_type: str    = ""
+    def _sync_values(self) -> None:
+        self.subject_id = self._parsed.subject_id
+        self.subject = self._parsed.original_subject
+        self.group = self._parsed.group
+        self.class_type = self._parsed.class_type
 
-        self._extract_subject_data()
-
-    def _extract_subject_data(self):
-        summary = (self.event.get("SUMMARY") or "").strip()
-
-        # Subject ID (from leading code)
-        m_code = self._CODE_PREFIX_RE.match(summary)
-        if m_code:
-            self.subject_id = m_code.group("code")
-            rest = summary[m_code.end():].strip()   # text after the code+dash
-        else:
-            self.subject_id = ""
-            rest = summary
-
-        # Maintained for backwards compatibility. For pre-2026 .ics from UV calendars
-        # These contained subject, type and group in summary field. see #3
-        m_group = self._GROUP_TYPE_RE.search(summary)
-        if m_group:
-            self.subject = self._GRUPO_TRAILER_RE.sub("", rest).strip()
-            self.class_type = m_group.group("type")
-            self.group = m_group.group("tag").upper()
-            return self
-
-        # The 2026 export puts the type in SUMMARY and group in DESCRIPTION.
-        m_summary = self._NEW_SUMMARY_RE.match(rest)
-        if m_summary:
-            self.subject = m_summary.group("subject").strip()
-            self.class_type = m_summary.group("type").strip()
-        else:
-            # Keep a readable title if a future export uses another layout.
-            self.subject = rest
-
-        description = (self.event.get("DESCRIPTION") or "").strip()
-        m_description = self._NEW_DESCRIPTION_RE.match(description)
-        if m_description:
-            self.group = m_description.group("tag").upper()
-            if not self.class_type:
-                self.class_type = m_description.group("type").strip()
-
+    def rename_subjects(self, config: dict | None = None, name: str | None = None):
+        replacement = config.get(self.subject_id) if config is not None else None
+        if replacement is None:
+            replacement = name
+        if replacement is not None:
+            self._parsed = replace(self._parsed, original_subject=replacement)
+            self._sync_values()
         return self
 
-    def rename_subjects(self, config:dict|None = None, name:str|None=None):
-        '''
-        Requires dict parameter consisting of subject id (5 digits), and
-        the desired name. 
-        '''
-        if config is None and name is None:
-            return self
-        
-        if self.subject_id in config.keys():
-            new_name = config[self.subject_id]
-
-        elif name is not None:
-            new_name = name
-
-        self.subject = new_name
-        
-        return self
-    
     def get_values(self):
         return {
             "subject": self.subject,
-            "subject_id":self.subject_id,
-            "class_type":self.class_type,
-            "class_group":self.group
+            "subject_id": self.subject_id,
+            "class_type": self.class_type,
+            "class_group": self.group,
         }
 
-    def to_event_data(self) -> CalendarEventData:
-        """Return this UV event as validated, normalized domain data."""
+    def to_event_data(self):
+        return self._parsed
 
-        start = self.event.get("DTSTART")
-        end = self.event.get("DTEND")
-        if start is None or end is None:
-            uid = self.event.get("UID") or "<missing UID>"
-            raise ValueError(f"Calendar event {uid} is missing DTSTART or DTEND")
 
-        return CalendarEventData(
-            uid=str(self.event.get("UID") or ""),
-            subject_id=self.subject_id,
-            original_subject=self.subject,
-            class_type=self.class_type,
-            group=self.group,
-            start=start,
-            end=end,
-            created=self.event.get("CREATED"),
-            location=str(self.event.get("LOCATION") or ""),
-        )
+def _optional_text(value) -> str | None:
+    return None if value is None else str(value)

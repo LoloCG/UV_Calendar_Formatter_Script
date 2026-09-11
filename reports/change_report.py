@@ -24,6 +24,8 @@ def render_change_report(
         f"Status: {_status_label(comparison.status)}",
         f"Analysed (UTC): {comparison.analyzed_at_utc}",
         f"Current source: {comparison.source_name}",
+        f"Current format: {comparison.current_source_format.adapter_id} "
+        f"({comparison.current_source_format.confidence:.0%} confidence)",
         f"Current SHA-256: {comparison.source_sha256}",
     ]
     baseline = comparison.baseline_metadata or {}
@@ -33,11 +35,17 @@ def render_change_report(
                 f"Baseline analysed (UTC): {baseline.get('analyzed_at_utc', '—')}",
                 f"Baseline accepted (UTC): {baseline.get('accepted_at_utc', '—')}",
                 f"Baseline SHA-256: {comparison.baseline_source_sha256 or '—'}",
+                f"Baseline format: "
+                f"{comparison.baseline_source_format.adapter_id if comparison.baseline_source_format else baseline.get('source_format', 'unknown')}",
             )
         )
     if comparison.possibly_unrelated:
         lines.extend(("", f"WARNING: Possibly unrelated calendar ({comparison.unrelated_reason})."))
     summary = comparison.summary
+    review_count = summary["ambiguous"] + sum(
+        diagnostic.severity == "review"
+        for diagnostic in comparison.projection_diagnostics
+    )
     lines.extend(
         (
             "",
@@ -46,12 +54,18 @@ def render_change_report(
             f"Added: {summary['added']}",
             f"Removed: {summary['removed']}",
             f"Modified: {summary['modified']}",
-            f"Needs review: {summary['ambiguous']}",
+            f"Needs review: {review_count}",
             f"New collisions: {summary['new_collisions']}",
             f"Resolved collisions: {summary['resolved_collisions']}",
             f"Changed collisions: {summary['changed_collisions']}",
         )
     )
+    if comparison.projection_diagnostics:
+        lines.extend(("", "PROJECTION DIAGNOSTICS", "----------------------"))
+        lines.extend(
+            f"{diagnostic.severity.upper()}: {diagnostic.message}"
+            for diagnostic in comparison.projection_diagnostics
+        )
     if comparison.status == "first":
         lines.extend(("", "This is the first analysis; sessions are not listed as added."))
     elif comparison.status == "unchanged":

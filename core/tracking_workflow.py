@@ -9,6 +9,7 @@ from core.calendar_workflow import load_calendar
 from core.change_tracking import PARSER_DATA_VERSION, canonical_sha256, compare_calendars
 from core.collision_detector import analyze_collisions
 from core.models import CalendarComparison, CollisionAnalysis, LoadedCalendar
+from core.semantic import resolve_baseline_location_fallbacks
 from core.state_store import CalendarStateStore, StateValidationError
 
 
@@ -48,6 +49,12 @@ def analyze_with_baseline(
             baseline_metadata = dict(baseline_metadata)
             baseline_metadata["parser_data_version"] = PARSER_DATA_VERSION
             baseline_metadata["canonical_sha256"] = derived_hash
+
+        resolved_current = resolve_baseline_location_fallbacks(current, baseline)
+        if resolved_current is not current:
+            current.events = resolved_current.events
+            current.projection_diagnostics = resolved_current.projection_diagnostics
+            current_collisions = analyze_collisions(current.events)
 
     comparison = compare_calendars(
         baseline,

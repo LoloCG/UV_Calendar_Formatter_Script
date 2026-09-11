@@ -1,6 +1,6 @@
 from enum import IntEnum
 
-from core.text_utils import normalize_label
+from core.semantic import activity_key
 
 
 class ActivityPriority(IntEnum):
@@ -15,12 +15,12 @@ class ActivityPriority(IntEnum):
 def activity_priority(class_type: str | None) -> ActivityPriority:
     """Classify a UV activity using accent- and case-insensitive labels."""
 
-    normalized = normalize_label(class_type)
-    if normalized in {"laboratorio", "laboratorios"}:
+    normalized = activity_key(class_type)
+    if normalized == "laboratorio":
         return ActivityPriority.LABORATORY
-    if normalized in {"seminario", "seminarios"}:
+    if normalized == "seminario":
         return ActivityPriority.SEMINAR
-    if normalized in {"tutoria", "tutorias"}:
+    if normalized == "tutoria":
         return ActivityPriority.TUTORIAL
     return ActivityPriority.CLASS
 
