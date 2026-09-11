@@ -85,10 +85,12 @@ calendar or the last explicitly accepted raw baseline. Inferred values retain
 their provenance, never override explicit current values, and cannot hide a
 schedule, group, activity, or confirmed room change.
 
-The observed fixtures and measurements are documented in
-[CALENDAR_UPDATE_IMPACT.md](CALENDAR_UPDATE_IMPACT.md). The implementation plan
-for format adapters and semantic event identity is in
-[CALENDAR_FORMAT_COMPATIBILITY_PLAN.md](CALENDAR_FORMAT_COMPATIBILITY_PLAN.md).
+Generated calendars use the semantic location display value for either known
+format and note inferred-location provenance in the event description. The
+change **Info** view shows the detected current and baseline formats, detection
+confidence, and projection diagnostics. Review-level diagnostics also appear
+in the change table and text report and prevent **Remember as baseline** until
+the source can be projected safely.
 
 ## Portable local data
 
@@ -150,6 +152,4 @@ use `<calendar-name>_changes.txt`.
 python -m unittest discover -s tests -v
 ```
 
-See [DATAFLOW.md](DATAFLOW.md) for current implementation details and
-[CALENDAR_FORMAT_COMPATIBILITY_PLAN.md](CALENDAR_FORMAT_COMPATIBILITY_PLAN.md)
-for the remaining cross-format architecture work.
+See [DATAFLOW.md](DATAFLOW.md) for current implementation details.
