@@ -55,7 +55,7 @@ class CollisionAnalysisTests(unittest.TestCase):
         )
 
     def test_current_fixture_matches_collision_baseline(self) -> None:
-        loaded = load_calendar(Path("test_files/new_format.ics"))
+        loaded = load_calendar(Path("test_files/calendar_07092025.ics"))
 
         analysis = analyze_collisions(loaded.events)
 

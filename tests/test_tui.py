@@ -44,6 +44,9 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(0, change_table.row_count)
                 self.assertFalse(change_table.display)
                 self.assertFalse(app.query_one("#remember-baseline", Button).disabled)
+                self.assertFalse(app.query_one("#view-changes", Button).display)
+                self.assertFalse(app.query_one("#save-change-report", Button).display)
+                self.assertEqual(0, len(app.query("#new-course-reset")))
                 self.assertEqual(0, len(app.query("#collision-table")))
                 self.assertFalse(app.query_one("#status", Static).display)
                 self.assertEqual("First calendar analysis", str(app.query_one("#change-summary", Static).content))
@@ -54,6 +57,7 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 comparison_details = str(app.screen.query_one("#comparison-info-content", Static).content)
                 self.assertIn("Current analysis", comparison_details)
                 self.assertIn("Source SHA-256", comparison_details)
+                self.assertIn("Detected format", comparison_details)
                 await pilot.click("#close-comparison-info")
                 await _wait_until(pilot, lambda: not isinstance(app.screen, ComparisonInfoScreen))
 
@@ -75,11 +79,6 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 await _wait_until(pilot, lambda: app.generation_result is not None)
                 self.assertEqual("Custom subject", generation_calls[0][1]["34082"])
 
-                app._reset_confirmed(True)
-                self.assertEqual("first", app.comparison.status)
-                self.assertFalse(app.query_one("#remember-baseline", Button).disabled)
-                self.assertFalse((root / "calendar_config.json").exists())
-
     async def test_initial_screen_mounts_at_compact_terminal_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             app = CalendarFormatterApp(config_path=Path(directory) / "calendar_config.json", file_picker=lambda: None, suspend_file_picker=False)
@@ -89,6 +88,7 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(select_button.disabled)
                 self.assertIs(select_button, app.focused)
                 self.assertTrue(app.query_one("#generate-calendar", Button).disabled)
+                self.assertEqual(0, len(app.query("#new-course-reset")))
                 self.assertEqual(default_desktop_directory() / "new_calendar.ics", app.output_path)
                 self.assertEqual(0, len(app.query("#state-path")))
                 self.assertFalse(app.query_one("#change-table", DataTable).display)
@@ -186,6 +186,10 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual("unchanged", app.comparison.status)
                 self.assertEqual("No calendar changes", str(app.query_one("#change-summary", Static).content))
                 self.assertFalse(app.query_one("#change-table", DataTable).display)
+                self.assertTrue(app.query_one("#view-changes", Button).display)
+                self.assertTrue(app.query_one("#save-change-report", Button).display)
+                self.assertFalse(app.query_one("#view-changes", Button).disabled)
+                self.assertFalse(app.query_one("#save-change-report", Button).disabled)
                 await pilot.click("#change-info")
                 await _wait_until(pilot, lambda: isinstance(app.screen, ComparisonInfoScreen))
                 details = str(app.screen.query_one("#comparison-info-content", Static).content)

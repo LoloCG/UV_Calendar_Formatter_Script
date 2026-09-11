@@ -1,4 +1,5 @@
 import json
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -6,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from core.change_tracking import canonical_sha256, compare_calendars, unrelated_calendar_reason
+from core.change_tracking import PARSER_DATA_VERSION, canonical_sha256, compare_calendars, unrelated_calendar_reason
 from core.collision_detector import analyze_collisions
 from core.models import CalendarEventData, LoadedCalendar
 from core.state_store import CalendarStateStore, StateValidationError
@@ -106,6 +107,27 @@ class ChangeTrackingTests(unittest.TestCase):
 
 
 class StateStoreTests(unittest.TestCase):
+    def test_deleted_data_directory_is_detected_as_fresh_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data_dir = root / "data"
+            source = root / "source.ics"
+            source.write_bytes(b"source")
+            loaded = _calendar(source, (_event("event"),))
+            store = CalendarStateStore(data_dir / "calendar_config.json")
+            store.accept_baseline(loaded, compare_calendars(None, loaded), {})
+
+            shutil.rmtree(data_dir)
+            comparison, warning = analyze_with_baseline(
+                store,
+                loaded,
+                analyze_collisions(loaded.events),
+            )
+
+            self.assertEqual("first", comparison.status)
+            self.assertEqual("", warning)
+            self.assertIsNone(store.baseline_metadata())
+
     def test_legacy_aliases_migrate_with_backup_and_first_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -202,7 +224,7 @@ class StateStoreTests(unittest.TestCase):
     def test_real_raw_baseline_is_reparsed_and_unchanged_check_is_lightweight(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = Path("test_files/new_format.ics")
+            source = Path("test_files/calendar_07092025.ics")
             first_path, second_path = root / "first.ics", root / "renamed.ics"
             first_path.write_bytes(source.read_bytes())
             second_path.write_bytes(source.read_bytes())
@@ -223,6 +245,37 @@ class StateStoreTests(unittest.TestCase):
             self.assertEqual("", warning)
             self.assertNotIn("last_change", store.load()["tracking"])
             self.assertEqual(1, len(list(store.baseline_dir.glob("*.ics"))))
+
+    def test_parser_migration_makes_cross_format_baseline_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calendar_path = root / "calendar-download.ics"
+            direct_path = root / "direct-download.ics"
+            calendar_path.write_bytes(Path("test_files/calendar_07092025.ics").read_bytes())
+            direct_path.write_bytes(Path("test_files/direct_download_07092025.ics").read_bytes())
+            from core.calendar_workflow import load_calendar
+
+            baseline = load_calendar(calendar_path)
+            store = CalendarStateStore(root / "calendar_config.json")
+            store.accept_baseline(baseline, compare_calendars(None, baseline), {})
+            manifest = store.load()
+            manifest["tracking"]["baseline"]["parser_data_version"] = 1
+            manifest["tracking"]["baseline"]["canonical_sha256"] = "0" * 64
+            store.path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            current = load_calendar(direct_path)
+            comparison, warning = analyze_with_baseline(
+                store,
+                current,
+                analyze_collisions(current.events),
+            )
+
+            self.assertEqual("unchanged", comparison.status)
+            self.assertEqual("", warning)
+            migrated = store.load()["tracking"]["baseline"]
+            self.assertEqual(PARSER_DATA_VERSION, migrated["parser_data_version"])
+            self.assertEqual(comparison.baseline_canonical_sha256, migrated["canonical_sha256"])
+            self.assertEqual("calendar-download", migrated["source_format"])
 
 
 def _time(hour: int, minute: int = 0) -> datetime:

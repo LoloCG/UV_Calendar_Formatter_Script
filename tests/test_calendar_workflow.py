@@ -25,8 +25,8 @@ class CalendarWorkflowTests(unittest.TestCase):
         self.assertTrue(disable_parser_colorization())
         self.assertFalse(GRAMMAR.config.colorize)
 
-    def test_new_fixture_loads_as_normalized_events(self) -> None:
-        loaded = load_calendar(Path("test_files/new_format.ics"))
+    def test_calendar_download_fixture_loads_as_normalized_events(self) -> None:
+        loaded = load_calendar(Path("test_files/calendar_07092025.ics"))
 
         self.assertEqual(372, len(loaded.events))
         self.assertEqual(8, len(loaded.subject_catalog))
@@ -34,6 +34,22 @@ class CalendarWorkflowTests(unittest.TestCase):
             "Tecnología Farmaceutica I",
             loaded.subject_catalog["34082"],
         )
+
+    def test_direct_download_generation_includes_semantic_locations(self) -> None:
+        loaded = load_calendar(Path("test_files/direct_download_07092025.ics"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = generate_formatted_calendar(
+                loaded,
+                config_path=root / "calendar_config.json",
+                output_path=root / "direct-formatted.ics",
+                persist_subject_names=False,
+            )
+            output = result.output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(372, result.event_count)
+        self.assertIn("LOCATION:AULA AF-14 B 21", output)
         self.assertTrue(
             all(
                 event.start.tzinfo is not None and event.end.tzinfo is not None
