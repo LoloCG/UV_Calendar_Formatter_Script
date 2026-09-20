@@ -16,6 +16,7 @@ sys.path.insert(0, SPECPATH)
 from core import __version__
 
 
+executable_name = f"UV-Calendar-Formatter-v{__version__}"
 version_parts = tuple(int(part) for part in __version__.split("."))
 if len(version_parts) != 3:
     raise ValueError("Application version must have exactly three numeric parts")
@@ -31,7 +32,7 @@ version_info = VSVersionInfo(
                         StringStruct("FileDescription", "UV Calendar Formatter"),
                         StringStruct("FileVersion", __version__),
                         StringStruct("InternalName", "UV-Calendar-Formatter"),
-                        StringStruct("OriginalFilename", "UV-Calendar-Formatter.exe"),
+                        StringStruct("OriginalFilename", f"{executable_name}.exe"),
                         StringStruct("ProductName", "UV Calendar Formatter"),
                         StringStruct("ProductVersion", __version__),
                     ],
@@ -63,7 +64,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="UV-Calendar-Formatter",
+    name=executable_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

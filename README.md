@@ -14,7 +14,8 @@ Download the archive for your platform from the
 - Windows x64: `UV-Calendar-Formatter-windows-x64.zip`
 - Linux x64: `UV-Calendar-Formatter-linux-x64.tar.gz`
 
-Extract the archive and run `UV-Calendar-Formatter.exe` on Windows or
+Extract the archive and run the versioned executable (for example,
+`UV-Calendar-Formatter-vX.Y.Z.exe`) on Windows or
 `./UV-Calendar-Formatter` on Linux. The app is a terminal user interface, so a
 terminal window is expected. Python does not need to be installed.
 
