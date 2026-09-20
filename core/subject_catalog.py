@@ -9,7 +9,7 @@ def build_subject_catalog(events: Iterable[CalendarEventData]) -> dict[str, str]
     ordered_events = sorted(
         events,
         key=lambda event: (
-            _subject_sort_key(event.subject_id),
+            subject_sort_key(event.subject_id),
             event.original_subject.casefold(),
         ),
     )
@@ -21,7 +21,9 @@ def build_subject_catalog(events: Iterable[CalendarEventData]) -> dict[str, str]
     return catalog
 
 
-def _subject_sort_key(subject_id: str) -> tuple[int, int | str]:
+def subject_sort_key(subject_id: str) -> tuple[int, int | str]:
+    """Sort numeric UV IDs naturally before non-numeric fallback IDs."""
+
     if subject_id.isdigit():
         return (0, int(subject_id))
     return (1, subject_id.casefold())
