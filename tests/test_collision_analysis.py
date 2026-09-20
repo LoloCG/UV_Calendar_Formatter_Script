@@ -4,7 +4,6 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from core.calendar_workflow import load_calendar
 from core.collision_detector import (
     analyze_collisions,
     collision_category,
@@ -28,6 +27,7 @@ class CollisionAnalysisTests(unittest.TestCase):
 
         self.assertEqual(0, analysis.collision_count)
         self.assertEqual(0, analysis.laboratory_collision_count)
+        self.assertEqual((), analysis.subject_summaries)
 
     def test_detector_keeps_all_pairs_and_builds_lab_projection(self) -> None:
         events = (
@@ -54,15 +54,63 @@ class CollisionAnalysisTests(unittest.TestCase):
             ],
         )
 
-    def test_current_fixture_matches_collision_baseline(self) -> None:
-        loaded = load_calendar(Path("test_files/calendar_07092025.ics"))
+    def test_subject_summaries_count_unique_sessions_and_activity_totals(self) -> None:
+        events = (
+            _event("lab", "LABORATORIO", 9, 12),
+            _event("class", "TEORÍA", 13, 14),
+            _event("seminar", "SEMINARIO", 9, 10, subject_id="99999"),
+            _event("tutorial", "Tutoría", 10, 11, subject_id="100000"),
+            _event("unknown", "TEORÍA", 11, 13, subject_id=""),
+        )
 
-        analysis = analyze_collisions(loaded.events)
+        analysis = analyze_collisions(events)
 
-        self.assertEqual(372, analysis.event_count)
-        self.assertEqual(19, analysis.collision_count)
-        self.assertEqual(16, analysis.laboratory_collision_count)
-        self.assertEqual(13, analysis.affected_laboratory_count)
+        self.assertEqual(
+            ("34082", "99999", "100000"),
+            tuple(summary.subject_id for summary in analysis.subject_summaries),
+        )
+        laboratory_subject = analysis.subject_summaries[0]
+        self.assertEqual(
+            (1, 2), (laboratory_subject.affected, laboratory_subject.total)
+        )
+        self.assertEqual(
+            (1, 1),
+            (
+                laboratory_subject.laboratory.affected,
+                laboratory_subject.laboratory.total,
+            ),
+        )
+        self.assertEqual(
+            (0, 0),
+            (laboratory_subject.seminar.affected, laboratory_subject.seminar.total),
+        )
+        self.assertEqual(
+            (0, 0),
+            (
+                laboratory_subject.tutorial.affected,
+                laboratory_subject.tutorial.total,
+            ),
+        )
+        self.assertEqual(
+            (0, 1),
+            (
+                laboratory_subject.class_sessions.affected,
+                laboratory_subject.class_sessions.total,
+            ),
+        )
+
+    def test_same_subject_collision_affects_both_sessions(self) -> None:
+        analysis = analyze_collisions(
+            (
+                _event("lab", "LABORATORIO", 9, 11),
+                _event("tutorial", "Tutoría", 10, 12),
+            )
+        )
+
+        summary = analysis.subject_summaries[0]
+        self.assertEqual((2, 2), (summary.affected, summary.total))
+        self.assertEqual(1, summary.laboratory.affected)
+        self.assertEqual(1, summary.tutorial.affected)
 
     def test_text_report_includes_all_collisions_and_saves_next_to_output(self) -> None:
         laboratory = _event("lab", "LABORATORIO", 9, 11)

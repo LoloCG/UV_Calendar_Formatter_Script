@@ -1,7 +1,15 @@
+from collections import Counter
 from collections.abc import Iterable
 
 from core.activity_policy import ActivityPriority, activity_priority
-from core.models import CalendarEventData, CollisionAnalysis, CollisionPair
+from core.models import (
+    CalendarEventData,
+    CollisionAnalysis,
+    CollisionPair,
+    CollisionSessionCounts,
+    SubjectCollisionSummary,
+)
+from core.subject_catalog import subject_sort_key
 
 
 def analyze_collisions(
@@ -49,6 +57,58 @@ def analyze_collisions(
         collisions=ordered_collisions,
         laboratory_collisions=laboratory_collisions,
         affected_laboratory_sessions=affected_laboratories,
+        subject_summaries=_subject_collision_summaries(
+            source_events, ordered_collisions
+        ),
+    )
+
+
+def _subject_collision_summaries(
+    events: tuple[CalendarEventData, ...],
+    collisions: tuple[CollisionPair, ...],
+) -> tuple[SubjectCollisionSummary, ...]:
+    totals: Counter[tuple[str, ActivityPriority]] = Counter()
+    affected: dict[str, set[str]] = {}
+    affected_by_activity: dict[tuple[str, ActivityPriority], set[str]] = {}
+
+    for event in events:
+        if event.subject_id:
+            totals[event.subject_id, activity_priority(event.class_type)] += 1
+
+    for collision in collisions:
+        for event in (collision.first, collision.second):
+            if not event.subject_id:
+                continue
+            identity = session_identity(event)
+            priority = activity_priority(event.class_type)
+            affected.setdefault(event.subject_id, set()).add(identity)
+            affected_by_activity.setdefault(
+                (event.subject_id, priority), set()
+            ).add(identity)
+
+    def counts(
+        subject_id: str, priority: ActivityPriority
+    ) -> CollisionSessionCounts:
+        return CollisionSessionCounts(
+            affected=len(affected_by_activity.get((subject_id, priority), ())),
+            total=totals[subject_id, priority],
+        )
+
+    return tuple(
+        SubjectCollisionSummary(
+            subject_id=subject_id,
+            affected=len(affected_sessions),
+            total=sum(
+                totals[subject_id, priority] for priority in ActivityPriority
+            ),
+            laboratory=counts(subject_id, ActivityPriority.LABORATORY),
+            seminar=counts(subject_id, ActivityPriority.SEMINAR),
+            tutorial=counts(subject_id, ActivityPriority.TUTORIAL),
+            class_sessions=counts(subject_id, ActivityPriority.CLASS),
+        )
+        for subject_id, affected_sessions in sorted(
+            affected.items(), key=lambda item: subject_sort_key(item[0])
+        )
     )
 
 

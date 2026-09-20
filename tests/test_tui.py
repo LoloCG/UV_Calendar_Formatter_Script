@@ -183,9 +183,20 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.click("#select-file")
                 await _wait_until(pilot, lambda: app.collision_analysis is not None)
                 original_calendar = app.loaded_calendar
+                app.working_subject_names["34082"] = "Configured Technology"
                 app.query_one("#review-collisions", Button).press()
                 await _wait_until(pilot, lambda: isinstance(app.screen, CollisionReviewScreen))
                 self.assertIsInstance(app.screen, CollisionReviewScreen)
+                subject_table = app.screen.query_one("#collision-subject-table", DataTable)
+                await _wait_until(pilot, lambda: subject_table.row_count == 4)
+                self.assertEqual("Configured Technology", subject_table.get_cell("34082", "subject"))
+                self.assertEqual("1", subject_table.get_cell("34082", "affected"))
+                self.assertEqual("1", subject_table.get_cell("34082", "total"))
+                self.assertEqual("1 / 1", subject_table.get_cell("34082", "laboratory"))
+                self.assertEqual("0 / 0", subject_table.get_cell("34082", "seminar"))
+                self.assertEqual("0 / 0", subject_table.get_cell("34082", "tutorial"))
+                self.assertEqual("0 / 0", subject_table.get_cell("34082", "class"))
+                self.assertFalse(app.screen.query_one("#collision-subject-empty", Static).display)
                 collision_table = app.screen.query_one("#collision-table", DataTable)
                 await _wait_until(pilot, lambda: collision_table.row_count == 2)
                 self.assertEqual(2, collision_table.row_count)
@@ -201,6 +212,36 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.click("#back-from-collisions"); await pilot.pause()
                 self.assertEqual(original_calendar, app.loaded_calendar)
                 self.assertEqual(0, len(app.query("#collision-table")))
+
+    async def test_collision_review_explains_an_empty_subject_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "no-collisions.ics"
+            source.write_bytes(b"no collisions")
+            app = CalendarFormatterApp(
+                file_picker=lambda: source,
+                calendar_loader=lambda _: _loaded_calendar(source),
+                config_path=root / "state.json",
+                suspend_file_picker=False,
+            )
+
+            async with app.run_test(size=(110, 42)) as pilot:
+                await pilot.click("#select-file")
+                await _wait_until(pilot, lambda: app.collision_analysis is not None)
+                app.query_one("#review-collisions", Button).press()
+                await _wait_until(pilot, lambda: isinstance(app.screen, CollisionReviewScreen))
+                await _wait_until(
+                    pilot,
+                    lambda: len(app.screen.query("#collision-subject-table")) == 1,
+                )
+
+                subject_table = app.screen.query_one("#collision-subject-table", DataTable)
+                empty_state = app.screen.query_one("#collision-subject-empty", Static)
+                await _wait_until(pilot, lambda: not subject_table.display)
+                self.assertEqual(0, subject_table.row_count)
+                self.assertFalse(subject_table.display)
+                self.assertTrue(empty_state.display)
+                self.assertEqual("No subjects with collisions.", str(empty_state.content))
 
     async def test_unchanged_calendar_has_compact_summary_and_detailed_info(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

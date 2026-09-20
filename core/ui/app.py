@@ -16,7 +16,15 @@ from core import __version__
 from core.calendar_workflow import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_PATH, generate_formatted_calendar, load_calendar, prepare_subject_names
 from core.change_tracking import compare_calendars
 from core.collision_detector import analyze_collisions, collision_category, orient_collision
-from core.models import CalendarComparison, CalendarEventData, CollisionAnalysis, CollisionPair, GenerationResult, LoadedCalendar
+from core.models import (
+    CalendarComparison,
+    CalendarEventData,
+    CollisionAnalysis,
+    CollisionPair,
+    CollisionSessionCounts,
+    GenerationResult,
+    LoadedCalendar,
+)
 from core.semantic import event_location_identity
 from core.state_store import CalendarStateStore
 from core.tracking_workflow import analyze_with_baseline
@@ -214,6 +222,10 @@ class CollisionReviewScreen(Screen[None]):
         with VerticalScroll(id="collision-content"):
             yield Label("Collision analysis", classes="screen-title")
             yield Static("", id="collision-full-summary")
+            yield Label("Subjects with collisions", classes="section-title")
+            yield DataTable(id="collision-subject-table")
+            yield Static("No subjects with collisions.", id="collision-subject-empty")
+            yield Label("All collision pairs", classes="section-title")
             yield DataTable(id="collision-table")
             yield Static("Select a row and press Enter to inspect both sessions.", id="collision-help")
             yield Label("Collision report", classes="section-title")
@@ -229,6 +241,19 @@ class CollisionReviewScreen(Screen[None]):
         return self.app  # type: ignore[return-value]
 
     def on_mount(self) -> None:
+        subject_table = self.query_one("#collision-subject-table", DataTable)
+        for title, key in (
+            ("Subject", "subject"),
+            ("Affected", "affected"),
+            ("Total", "total"),
+            ("Laboratory", "laboratory"),
+            ("Seminar", "seminar"),
+            ("Tutorial", "tutorial"),
+            ("Class", "class"),
+        ):
+            subject_table.add_column(title, key=key)
+        subject_table.cursor_type, subject_table.zebra_stripes = "none", True
+
         table = self.query_one("#collision-table", DataTable)
         for title, key in (("Date", "date"), ("Overlap", "overlap"), ("Category", "category"), ("Event", "event"), ("Collides with", "other")):
             table.add_column(title, key=key)
@@ -238,6 +263,27 @@ class CollisionReviewScreen(Screen[None]):
             return
         self.query_one("#collision-full-summary", Static).update(self.formatter.collision_summary_text())
         self.query_one("#collision-report-path", Static).update(str(self.formatter.report_path.resolve()))
+        loaded = self.formatter.loaded_calendar
+        for summary in analysis.subject_summaries:
+            subject_name = self.formatter.working_subject_names.get(
+                summary.subject_id,
+                loaded.subject_catalog.get(summary.subject_id, summary.subject_id)
+                if loaded is not None
+                else summary.subject_id,
+            )
+            subject_table.add_row(
+                subject_name,
+                str(summary.affected),
+                str(summary.total),
+                _session_count_text(summary.laboratory),
+                _session_count_text(summary.seminar),
+                _session_count_text(summary.tutorial),
+                _session_count_text(summary.class_sessions),
+                key=summary.subject_id,
+            )
+        has_subjects = bool(analysis.subject_summaries)
+        subject_table.display = has_subjects
+        self.query_one("#collision-subject-empty", Static).display = not has_subjects
         for index, collision in enumerate(analysis.collisions):
             first, second = orient_collision(collision)
             table.add_row(collision.overlap_start.date().isoformat(), f"{collision.overlap_start:%H:%M}–{collision.overlap_end:%H:%M}", collision_category(collision), self.formatter.event_display_name(first), self.formatter.event_display_name(second), key=str(index))
@@ -744,6 +790,10 @@ def _same_path(left: Path, right: Path) -> bool:
 
 def _compact_event(event: CalendarEventData) -> str:
     return f"{event.start:%H:%M}–{event.end:%H:%M}; {event.location or '—'}; {event.class_type or '—'}; {event.group or '—'}"
+
+
+def _session_count_text(counts: CollisionSessionCounts) -> str:
+    return f"{counts.affected} / {counts.total}"
 
 
 def _comparison_info_text(comparison: CalendarComparison) -> str:

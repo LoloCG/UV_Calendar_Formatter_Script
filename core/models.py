@@ -223,13 +223,35 @@ class CollisionPair:
 
 
 @dataclass(frozen=True, slots=True)
+class CollisionSessionCounts:
+    """Affected and observed session counts for one activity type."""
+
+    affected: int
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class SubjectCollisionSummary:
+    """Distinct affected sessions and denominators for one subject."""
+
+    subject_id: str
+    affected: int
+    total: int
+    laboratory: CollisionSessionCounts
+    seminar: CollisionSessionCounts
+    tutorial: CollisionSessionCounts
+    class_sessions: CollisionSessionCounts
+
+
+@dataclass(frozen=True, slots=True)
 class CollisionAnalysis:
-    """Neutral collisions plus the laboratory-focused reporting projection."""
+    """Neutral collisions plus derived session-count projections."""
 
     event_count: int
     collisions: tuple[CollisionPair, ...]
     laboratory_collisions: tuple[CollisionPair, ...]
     affected_laboratory_sessions: frozenset[str]
+    subject_summaries: tuple[SubjectCollisionSummary, ...] = ()
 
     @property
     def collision_count(self) -> int:
