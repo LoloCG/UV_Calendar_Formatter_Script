@@ -224,10 +224,23 @@ class StateStoreTests(unittest.TestCase):
     def test_real_raw_baseline_is_reparsed_and_unchanged_check_is_lightweight(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = Path("test_files/calendar_07092025.ics")
             first_path, second_path = root / "first.ics", root / "renamed.ics"
-            first_path.write_bytes(source.read_bytes())
-            second_path.write_bytes(source.read_bytes())
+            source_text = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//secvirtual.uv.es//SECVIRTUAL UV
+X-WR-CALNAME:Test calendar
+BEGIN:VEVENT
+UID:event-1
+DTSTAMP:20260907T170443Z
+DTSTART:20260914T080000Z
+DTEND:20260914T090000Z
+SUMMARY:34082 - Subject Grupo Teoría DG-T
+DESCRIPTION:AULA 1 21
+END:VEVENT
+END:VCALENDAR
+"""
+            first_path.write_text(source_text, encoding="utf-8")
+            second_path.write_text(source_text, encoding="utf-8")
             from core.calendar_workflow import load_calendar
 
             first = load_calendar(first_path)
@@ -251,8 +264,8 @@ class StateStoreTests(unittest.TestCase):
             root = Path(directory)
             calendar_path = root / "calendar-download.ics"
             direct_path = root / "direct-download.ics"
-            calendar_path.write_bytes(Path("test_files/calendar_07092025.ics").read_bytes())
-            direct_path.write_bytes(Path("test_files/direct_download_07092025.ics").read_bytes())
+            calendar_path.write_bytes(Path("test_files/calendar_07092026.ics").read_bytes())
+            direct_path.write_bytes(Path("test_files/direct_download_07092026.ics").read_bytes())
             from core.calendar_workflow import load_calendar
 
             baseline = load_calendar(calendar_path)
