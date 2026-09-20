@@ -12,6 +12,7 @@ from textual.scrollbar import ScrollBar, ScrollBarRender
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, LoadingIndicator, Static, TextArea
 
+from core import __version__
 from core.calendar_workflow import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_PATH, generate_formatted_calendar, load_calendar, prepare_subject_names
 from core.change_tracking import compare_calendars
 from core.collision_detector import analyze_collisions, collision_category, orient_collision
@@ -272,7 +273,7 @@ class CollisionReviewScreen(Screen[None]):
 
 class CalendarFormatterApp(App[None]):
     CSS_PATH = "calendar_formatter.tcss"
-    TITLE = "UV Calendar Formatter"
+    TITLE = f"UV Calendar Formatter v{__version__}"
     SUB_TITLE = "Calendar import, comparison, and generation"
     BINDINGS = [("q", "quit_app", "Quit"), ("c", "review_collisions", "Collisions")]
 

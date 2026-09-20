@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from datetime import datetime
 
+from core import __version__
 from core.change_tracking import (
     PARSER_DATA_VERSION,
     comparison_to_record,
@@ -22,7 +23,6 @@ from core.models import CalendarComparison, LoadedCalendar
 
 
 SCHEMA_VERSION = 2
-APPLICATION_VERSION = "0.2.0"
 STATE_FILENAME = "calendar_config.json"
 
 
@@ -217,7 +217,7 @@ class CalendarStateStore:
         manifest["tracking"]["baseline"] = {
             "analyzed_at_utc": comparison.analyzed_at_utc,
             "accepted_at_utc": accepted_at,
-            "application_version": APPLICATION_VERSION,
+            "application_version": __version__,
             "parser_data_version": PARSER_DATA_VERSION,
             "source_name": loaded.source_path.name,
             "source_format": loaded.source_format.adapter_id,

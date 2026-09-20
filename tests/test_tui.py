@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from textual.widgets import Button, DataTable, Input, Static, TextArea
 
+from core import __version__
 from core.change_tracking import compare_calendars
 from core.models import CalendarEventData, GenerationResult, LoadedCalendar
 from core.state_store import CalendarStateStore
@@ -92,6 +93,7 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(default_desktop_directory() / "new_calendar.ics", app.output_path)
                 self.assertEqual(0, len(app.query("#state-path")))
                 self.assertFalse(app.query_one("#change-table", DataTable).display)
+                self.assertEqual(f"UV Calendar Formatter v{__version__}", app.title)
 
     async def test_output_picker_updates_calendar_and_both_report_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

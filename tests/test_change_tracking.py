@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from core import __version__
 from core.change_tracking import PARSER_DATA_VERSION, canonical_sha256, compare_calendars, unrelated_calendar_reason
 from core.collision_detector import analyze_collisions
 from core.models import CalendarEventData, LoadedCalendar
@@ -144,6 +145,7 @@ class StateStoreTests(unittest.TestCase):
 
             self.assertEqual(2, manifest["schema_version"])
             self.assertEqual("Custom", manifest["subject_names"]["1"])
+            self.assertEqual(__version__, manifest["tracking"]["baseline"]["application_version"])
             baseline_path = store.verified_baseline_path(manifest)
             self.assertEqual(b"exact raw source", baseline_path.read_bytes())
             self.assertTrue(state_path.with_suffix(".json.legacy.bak").exists())
