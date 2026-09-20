@@ -41,8 +41,9 @@ modified.
 
 ## Workflow
 
-1. Select a UV ICS calendar. Parsing, normalization, collision detection, and
-   comparison run in a background worker.
+1. On the first run, select a UV ICS calendar. Once a baseline has been
+   remembered, later launches load it automatically for collision review,
+   subject editing, and generation. Select another ICS only to check an update.
 2. Review **Changes since previous calendar**. A first analysis deliberately
    does not list every session as added. Later analyses show added, removed,
    rescheduled, relocated, regrouped, retyped, and ambiguous sessions plus new,

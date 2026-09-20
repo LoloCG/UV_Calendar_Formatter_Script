@@ -95,6 +95,44 @@ class CalendarFormatterAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(app.query_one("#change-table", DataTable).display)
                 self.assertEqual(f"UV Calendar Formatter v{__version__}", app.title)
 
+    async def test_remembered_baseline_loads_on_startup_without_recording_an_update_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "fixture.ics"
+            source.write_bytes(b"remembered calendar")
+            loaded = _loaded_collision_calendar(source)
+            config_path = root / "calendar_config.json"
+            store = CalendarStateStore(config_path)
+            store.accept_baseline(loaded, compare_calendars(None, loaded), {"34082": "Saved technology"})
+            last_check = store.load()["tracking"]["last_check"]
+            loaded_paths = []
+
+            def load(path: Path) -> LoadedCalendar:
+                loaded_paths.append(path)
+                return _loaded_collision_calendar(path)
+
+            app = CalendarFormatterApp(
+                calendar_loader=load,
+                config_path=config_path,
+                file_picker=lambda: None,
+                suspend_file_picker=False,
+            )
+            async with app.run_test(size=(110, 42)) as pilot:
+                await _wait_until(pilot, lambda: app.loaded_calendar is not None and not app._busy)
+
+                self.assertTrue(loaded_paths)
+                self.assertTrue(all(path == store.verified_baseline_path() for path in loaded_paths))
+                self.assertEqual(2, app.collision_analysis.collision_count)
+                self.assertEqual("Saved technology", app.working_subject_names["34082"])
+                self.assertFalse(app.query_one("#review-collisions", Button).disabled)
+                self.assertFalse(app.query_one("#generate-calendar", Button).disabled)
+                self.assertFalse(app.query_one("#view-changes", Button).display)
+                self.assertFalse(app.query_one("#save-change-report", Button).display)
+                self.assertTrue(app.query_one("#change-info", Button).disabled)
+                self.assertIn("Remembered calendar: fixture.ics", str(app.query_one("#selected-path", Static).content))
+                self.assertIn("Select an updated ICS", str(app.query_one("#change-summary", Static).content))
+                self.assertEqual(last_check, store.load()["tracking"]["last_check"])
+
     async def test_output_picker_updates_calendar_and_both_report_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             selected = Path(directory) / "custom-calendar"
