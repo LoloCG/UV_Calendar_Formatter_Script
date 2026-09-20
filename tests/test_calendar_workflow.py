@@ -25,18 +25,8 @@ class CalendarWorkflowTests(unittest.TestCase):
         self.assertTrue(disable_parser_colorization())
         self.assertFalse(GRAMMAR.config.colorize)
 
-    def test_calendar_download_fixture_loads_as_normalized_events(self) -> None:
-        loaded = load_calendar(Path("test_files/calendar_07092025.ics"))
-
-        self.assertEqual(372, len(loaded.events))
-        self.assertEqual(8, len(loaded.subject_catalog))
-        self.assertEqual(
-            "Tecnología Farmaceutica I",
-            loaded.subject_catalog["34082"],
-        )
-
     def test_direct_download_generation_includes_semantic_locations(self) -> None:
-        loaded = load_calendar(Path("test_files/direct_download_07092025.ics"))
+        loaded = load_calendar(Path("test_files/direct_download_07092026.ics"))
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

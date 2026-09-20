@@ -41,8 +41,9 @@ modified.
 
 ## Workflow
 
-1. Select a UV ICS calendar. Parsing, normalization, collision detection, and
-   comparison run in a background worker.
+1. On the first run, select a UV ICS calendar. Once a baseline has been
+   remembered, later launches load it automatically for collision review,
+   subject editing, and generation. Select another ICS only to check an update.
 2. Review **Changes since previous calendar**. A first analysis deliberately
    does not list every session as added. Later analyses show added, removed,
    rescheduled, relocated, regrouped, retyped, and ambiguous sessions plus new,
@@ -135,9 +136,13 @@ Deleting `data` performs a complete manual new-course reset.
 ## Collision behavior
 
 Intervals use half-open semantics, so a session ending exactly when another
-starts is not a collision. The screen includes all pairs and a laboratory-
-priority projection. Priority affects presentation and generated busy/free
-behavior only:
+starts is not a collision. The review screen first lists only subjects with
+collisions. Each subject shows distinct affected sessions, total sessions, and
+`affected / total` values for laboratory, seminar, tutorial, and class sessions;
+an unavailable activity for that subject is shown as `0 / 0`. The existing
+collision-pair table and laboratory-priority projection remain available below
+the summary. Priority affects presentation and generated busy/free behavior
+only:
 
 ```text
 Laboratory > Seminar > Tutorial > Class

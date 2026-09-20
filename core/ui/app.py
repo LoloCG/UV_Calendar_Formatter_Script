@@ -12,10 +12,19 @@ from textual.scrollbar import ScrollBar, ScrollBarRender
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, LoadingIndicator, Static, TextArea
 
+from core import __version__
 from core.calendar_workflow import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_PATH, generate_formatted_calendar, load_calendar, prepare_subject_names
 from core.change_tracking import compare_calendars
 from core.collision_detector import analyze_collisions, collision_category, orient_collision
-from core.models import CalendarComparison, CalendarEventData, CollisionAnalysis, CollisionPair, GenerationResult, LoadedCalendar
+from core.models import (
+    CalendarComparison,
+    CalendarEventData,
+    CollisionAnalysis,
+    CollisionPair,
+    CollisionSessionCounts,
+    GenerationResult,
+    LoadedCalendar,
+)
 from core.semantic import event_location_identity
 from core.state_store import CalendarStateStore
 from core.tracking_workflow import analyze_with_baseline
@@ -213,6 +222,10 @@ class CollisionReviewScreen(Screen[None]):
         with VerticalScroll(id="collision-content"):
             yield Label("Collision analysis", classes="screen-title")
             yield Static("", id="collision-full-summary")
+            yield Label("Subjects with collisions", classes="section-title")
+            yield DataTable(id="collision-subject-table")
+            yield Static("No subjects with collisions.", id="collision-subject-empty")
+            yield Label("All collision pairs", classes="section-title")
             yield DataTable(id="collision-table")
             yield Static("Select a row and press Enter to inspect both sessions.", id="collision-help")
             yield Label("Collision report", classes="section-title")
@@ -228,6 +241,19 @@ class CollisionReviewScreen(Screen[None]):
         return self.app  # type: ignore[return-value]
 
     def on_mount(self) -> None:
+        subject_table = self.query_one("#collision-subject-table", DataTable)
+        for title, key in (
+            ("Subject", "subject"),
+            ("Affected", "affected"),
+            ("Total", "total"),
+            ("Laboratory", "laboratory"),
+            ("Seminar", "seminar"),
+            ("Tutorial", "tutorial"),
+            ("Class", "class"),
+        ):
+            subject_table.add_column(title, key=key)
+        subject_table.cursor_type, subject_table.zebra_stripes = "none", True
+
         table = self.query_one("#collision-table", DataTable)
         for title, key in (("Date", "date"), ("Overlap", "overlap"), ("Category", "category"), ("Event", "event"), ("Collides with", "other")):
             table.add_column(title, key=key)
@@ -237,6 +263,27 @@ class CollisionReviewScreen(Screen[None]):
             return
         self.query_one("#collision-full-summary", Static).update(self.formatter.collision_summary_text())
         self.query_one("#collision-report-path", Static).update(str(self.formatter.report_path.resolve()))
+        loaded = self.formatter.loaded_calendar
+        for summary in analysis.subject_summaries:
+            subject_name = self.formatter.working_subject_names.get(
+                summary.subject_id,
+                loaded.subject_catalog.get(summary.subject_id, summary.subject_id)
+                if loaded is not None
+                else summary.subject_id,
+            )
+            subject_table.add_row(
+                subject_name,
+                str(summary.affected),
+                str(summary.total),
+                _session_count_text(summary.laboratory),
+                _session_count_text(summary.seminar),
+                _session_count_text(summary.tutorial),
+                _session_count_text(summary.class_sessions),
+                key=summary.subject_id,
+            )
+        has_subjects = bool(analysis.subject_summaries)
+        subject_table.display = has_subjects
+        self.query_one("#collision-subject-empty", Static).display = not has_subjects
         for index, collision in enumerate(analysis.collisions):
             first, second = orient_collision(collision)
             table.add_row(collision.overlap_start.date().isoformat(), f"{collision.overlap_start:%H:%M}–{collision.overlap_end:%H:%M}", collision_category(collision), self.formatter.event_display_name(first), self.formatter.event_display_name(second), key=str(index))
@@ -272,7 +319,7 @@ class CollisionReviewScreen(Screen[None]):
 
 class CalendarFormatterApp(App[None]):
     CSS_PATH = "calendar_formatter.tcss"
-    TITLE = "UV Calendar Formatter"
+    TITLE = f"UV Calendar Formatter v{__version__}"
     SUB_TITLE = "Calendar import, comparison, and generation"
     BINDINGS = [("q", "quit_app", "Quit"), ("c", "review_collisions", "Collisions")]
 
@@ -301,11 +348,12 @@ class CalendarFormatterApp(App[None]):
         self._tracking_available = True
         self._tracking_warning = ""
         self._baseline_accepted_current = False
+        self._showing_remembered_baseline = False
 
     def compose(self) -> ComposeResult:
         yield Header(icon="")
         with VerticalScroll(id="main-content"):
-            yield Label("Select a University of Valencia ICS calendar to inspect and format.", id="intro")
+            yield Label("Your remembered calendar loads automatically. Select an ICS calendar to start or check for updates.", id="intro")
             with Horizontal(id="file-actions"):
                 yield Button("Select ICS calendar", id="select-file", variant="primary")
                 yield Button("Exit", id="exit-app", variant="error")
@@ -356,6 +404,21 @@ class CalendarFormatterApp(App[None]):
         tracking_warning = self.query_one("#tracking-warning", Static)
         tracking_warning.update(self._tracking_warning)
         tracking_warning.display = bool(self._tracking_warning)
+        try:
+            manifest = self.state_store.load()
+            baseline_path = self.state_store.verified_baseline_path(manifest)
+            baseline_metadata = manifest["tracking"].get("baseline")
+        except Exception as error:
+            self._tracking_available = False
+            self._tracking_warning = f"Remembered calendar could not be loaded: {error}. Select an ICS calendar to continue."
+            tracking_warning.update(self._tracking_warning)
+            tracking_warning.display = True
+            return
+        if baseline_path is not None and baseline_metadata is not None:
+            self.query_one("#select-file", Button).label = "Check updated ICS calendar"
+            self.query_one("#selected-path", Static).update(f"Remembered calendar: {baseline_metadata['source_name']}")
+            self._prepare_for_load(baseline_path, remembered=True)
+            self._load_selected_calendar(baseline_path, persist_last_check=False, remembered=True)
 
     def on_ready(self) -> None:
         """Give Windows terminals a second complete first-frame repaint."""
@@ -392,21 +455,22 @@ class CalendarFormatterApp(App[None]):
         self._prepare_for_load(path)
         self._load_selected_calendar(path)
 
-    def _prepare_for_load(self, path: Path) -> None:
+    def _prepare_for_load(self, path: Path, *, remembered: bool = False) -> None:
         self.loaded_calendar = self.collision_analysis = self.comparison = self.generation_result = None
         self.report_result_path = self.change_report_result_path = None
         self.working_subject_names.clear(); self.initial_subject_names.clear(); self.modified_subject_ids.clear()
         self.configured_subject_ids = frozenset()
         self._subject_names_ready = self._baseline_accepted_current = False
+        self._showing_remembered_baseline = remembered
         self.query_one("#subject-table", DataTable).clear()
         change_table = self.query_one("#change-table", DataTable)
         change_table.clear(); change_table.display = False
-        self.query_one("#change-summary", Static).update("Reading baseline and comparing sessions…")
+        self.query_one("#change-summary", Static).update("Loading remembered calendar…" if remembered else "Reading baseline and comparing sessions…")
         self.query_one("#collision-summary", Static).update("Reading events and calculating collisions…")
-        self._set_busy(True, f"Reading and analysing {path.name}…")
+        self._set_busy(True, "Loading remembered calendar…" if remembered else f"Reading and analysing {path.name}…")
 
     @work(thread=True, exclusive=True, group="calendar-load")
-    def _load_selected_calendar(self, path: Path) -> None:
+    def _load_selected_calendar(self, path: Path, *, persist_last_check: bool = True, remembered: bool = False) -> None:
         try:
             loaded = self._calendar_loader(path)
             collisions = self._collision_analyzer(loaded.events)
@@ -415,7 +479,7 @@ class CalendarFormatterApp(App[None]):
         warning, tracking_available = self._tracking_warning, self._tracking_available
         try:
             original_events = loaded.events
-            comparison, analysis_warning = analyze_with_baseline(self.state_store, loaded, collisions, calendar_loader=self._calendar_loader, persist_last_check=tracking_available)
+            comparison, analysis_warning = analyze_with_baseline(self.state_store, loaded, collisions, calendar_loader=self._calendar_loader, persist_last_check=tracking_available and persist_last_check)
             if loaded.events is not original_events:
                 collisions = self._collision_analyzer(loaded.events)
             if analysis_warning:
@@ -428,9 +492,9 @@ class CalendarFormatterApp(App[None]):
                 comparison = compare_calendars(None, loaded, current_collisions=collisions)
             except Exception as comparison_error:
                 self.call_from_thread(self._load_failed, comparison_error); return
-        self.call_from_thread(self._load_finished, loaded, collisions, comparison, warning, tracking_available)
+        self.call_from_thread(self._load_finished, loaded, collisions, comparison, warning, tracking_available, remembered)
 
-    def _load_finished(self, loaded, collisions, comparison, warning, tracking_available) -> None:
+    def _load_finished(self, loaded, collisions, comparison, warning, tracking_available, remembered=False) -> None:
         try:
             # Read access to aliases remains useful even when the portable
             # directory is not writable; only persistence actions are disabled.
@@ -443,6 +507,8 @@ class CalendarFormatterApp(App[None]):
         self.working_subject_names, self.initial_subject_names = names, dict(names)
         self.configured_subject_ids, self.modified_subject_ids = configured, set()
         self._subject_names_ready, self._tracking_available = True, tracking_available
+        self._showing_remembered_baseline = remembered
+        self._baseline_accepted_current = remembered
         self._tracking_warning = warning
         tracking_warning = self.query_one("#tracking-warning", Static)
         tracking_warning.update(warning)
@@ -453,6 +519,7 @@ class CalendarFormatterApp(App[None]):
             table.add_row(Text(subject_id), Text(name), Text(names[subject_id]), str(counts[subject_id]), self._subject_name_status(subject_id), key=subject_id)
         self._populate_change_table(); self._refresh_change_summary(); self._refresh_collision_summary(); self._refresh_calendar_summary()
         self._set_busy(False, "")
+        if remembered: self.query_one("#select-file", Button).focus()
         if comparison.possibly_unrelated:
             self.notify(f"Possibly unrelated calendar: {comparison.unrelated_reason}. For a new academic year, close the app, delete {self.state_store.data_dir}, restart, and load the calendar again.", title="Review required", severity="warning", timeout=10)
 
@@ -608,8 +675,8 @@ class CalendarFormatterApp(App[None]):
         self.query_one("#select-file", Button).disabled = busy; self.query_one("#choose-output", Button).disabled = busy
         self.query_one("#generate-calendar", Button).disabled = busy or self.loaded_calendar is None or not self._subject_names_ready
         self.query_one("#review-collisions", Button).disabled = busy or self.collision_analysis is None
-        self.query_one("#change-info", Button).disabled = busy or self.comparison is None
-        has_baseline_comparison = self.comparison is not None and self.comparison.status != "first"
+        self.query_one("#change-info", Button).disabled = busy or self.comparison is None or self._showing_remembered_baseline
+        has_baseline_comparison = self.comparison is not None and self.comparison.status != "first" and not self._showing_remembered_baseline
         view_changes = self.query_one("#view-changes", Button)
         save_change_report = self.query_one("#save-change-report", Button)
         view_changes.display = save_change_report.display = has_baseline_comparison
@@ -635,7 +702,8 @@ class CalendarFormatterApp(App[None]):
     def _refresh_change_summary(self) -> None:
         comparison = self.comparison
         if comparison is None: return
-        if comparison.status == "first": text = "First calendar analysis"
+        if self._showing_remembered_baseline: text = "Showing the remembered baseline. Select an updated ICS calendar to review changes."
+        elif comparison.status == "first": text = "First calendar analysis"
         elif comparison.status == "unchanged": text = "No calendar changes"
         else:
             summary = comparison.summary
@@ -645,7 +713,7 @@ class CalendarFormatterApp(App[None]):
         if comparison.possibly_unrelated: text += f"\nPossibly unrelated calendar: {comparison.unrelated_reason}. For a new academic year, close the app, delete the portable data folder, restart, and load it again."
         review_count = sum(diagnostic.severity == "review" for diagnostic in comparison.projection_diagnostics)
         if review_count: text += f"\nProjection review required: {review_count} diagnostic(s)."
-        if self._baseline_accepted_current: text += "\nRemembered as the current baseline."
+        if self._baseline_accepted_current and not self._showing_remembered_baseline: text += "\nRemembered as the current baseline."
         self.query_one("#change-summary", Static).update(text)
 
     def _populate_change_table(self) -> None:
@@ -722,6 +790,10 @@ def _same_path(left: Path, right: Path) -> bool:
 
 def _compact_event(event: CalendarEventData) -> str:
     return f"{event.start:%H:%M}–{event.end:%H:%M}; {event.location or '—'}; {event.class_type or '—'}; {event.group or '—'}"
+
+
+def _session_count_text(counts: CollisionSessionCounts) -> str:
+    return f"{counts.affected} / {counts.total}"
 
 
 def _comparison_info_text(comparison: CalendarComparison) -> str:

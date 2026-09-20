@@ -7,8 +7,8 @@ from core.change_tracking import canonical_sha256, compare_calendars
 from core.collision_detector import analyze_collisions
 
 
-CALENDAR_DOWNLOAD = Path("test_files/calendar_07092025.ics")
-DIRECT_DOWNLOAD = Path("test_files/direct_download_07092025.ics")
+CALENDAR_DOWNLOAD = Path("test_files/calendar_07092026.ics")
+DIRECT_DOWNLOAD = Path("test_files/direct_download_07092026.ics")
 PRIOR_YEAR_DIRECT_DOWNLOAD = Path("test_files/2025/oldcal2025.ics")
 
 
@@ -62,6 +62,10 @@ class CalendarFormatCharacterizationTests(unittest.TestCase):
         self.assertEqual(
             ((2025, 9, 15), (2026, 5, 12)),
             _date_bounds(prior),
+        )
+        self.assertEqual(
+            "Tecnología Farmaceutica I",
+            calendar.subject_catalog["34082"],
         )
 
     def test_raw_boundary_preserves_description_and_location_presence(self) -> None:

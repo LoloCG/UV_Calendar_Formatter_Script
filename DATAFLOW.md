@@ -339,8 +339,15 @@ This half-open rule includes partial, contained, and identical overlaps while
 excluding adjacent sessions. No input or output event is modified or removed.
 
 The main screen shows aggregate counts. **Review collisions** opens a dedicated
-screen with all collision pairs, laboratory-involved pairs, affected laboratory
-sessions, categories, row details, report preview, and save action.
+screen with a subject summary above the unchanged collision-pair table. The
+summary contains only subjects with collisions and counts each affected session
+once even when it overlaps several counterparts. It shows overall affected and
+total sessions plus `affected / total` for laboratory, seminar, tutorial, and
+class sessions. All four activity columns remain visible, including `0 / 0`.
+Parsed subject IDs are stable aggregation keys but are not displayed; configured
+aliases are presentation labels. Subject-less events are omitted from this
+summary but remain in the pair table. The screen also retains laboratory-
+involved counts, categories, row details, report preview, and save action.
 
 The shared priority order is:
 
@@ -519,8 +526,8 @@ that information.
 
 The automated compatibility tests establish the current behavior:
 
-- `calendar_07092025.ics`: 372 events, detected as `calendar-download`;
-- `direct_download_07092025.ics`: 372 events, detected as
+- `calendar_07092026.ics`: 372 events, detected as `calendar-download`;
+- `direct_download_07092026.ics`: 372 events, detected as
   `direct-download`;
 - both project to equal semantic hashes and compare as unchanged in either
   direction;
