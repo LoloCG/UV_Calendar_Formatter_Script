@@ -16,8 +16,8 @@ Download the archive for your platform from the
 
 Extract the archive and run the versioned executable (for example,
 `UV-Calendar-Formatter-vX.Y.Z.exe`) on Windows or
-`./UV-Calendar-Formatter` on Linux. The app is a terminal user interface, so a
-terminal window is expected. Python does not need to be installed.
+`./UV-Calendar-Formatter-vX.Y.Z` on Linux. The app is a terminal user interface,
+so a terminal window is expected. Python does not need to be installed.
 
 Do not run the executable from inside the ZIP or place it in a protected folder
 such as `Program Files`: its portable `data` directory is created beside the
